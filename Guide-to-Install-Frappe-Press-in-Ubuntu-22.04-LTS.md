@@ -121,7 +121,7 @@ A software like ERPNext, which is built on Frappe Framework, requires a number o
     ###OR
     bench get-app erpnext --branch version-15
 
-    bench get-app bench https://github.com/yooltech/easytouch_press.git 
+    bench get-app bench https://github.com/yt-easytouch/easytouch_press.git 
     (Private)
     ###OR
     bench get-app bench get-app https://github.com/frappe/press
