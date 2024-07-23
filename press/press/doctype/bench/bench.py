@@ -2,13 +2,14 @@
 # Copyright (c) 2019, Frappe and contributors
 # For license information, please see license.txt
 
-from itertools import groupby
 import json
+from collections import OrderedDict
 from functools import cached_property
-import pytz
+from itertools import groupby
 from typing import TYPE_CHECKING, Iterable, Literal, Optional
 
 import frappe
+import pytz
 from frappe.exceptions import DoesNotExistError
 from frappe.model.document import Document
 from frappe.model.naming import append_number_if_name_exists, make_autoname
@@ -21,8 +22,7 @@ from press.press.doctype.bench_shell_log.bench_shell_log import (
 	create_bench_shell_log,
 )
 from press.press.doctype.site.site import Site
-from press.utils import log_error
-
+from press.utils import SupervisorProcess, flatten, log_error, parse_supervisor_status
 
 TRANSITORY_STATES = ["Pending", "Installing"]
 FINAL_STATES = ["Active", "Broken", "Archived"]
@@ -497,7 +497,6 @@ class Bench(Document):
 
 	@frappe.whitelist()
 	def retry_bench(self):
-
 		if frappe.get_value("Deploy Candidate", self.candidate, "status") != "Success":
 			frappe.throw(f"Deploy Candidate {self.candidate} is not Active")
 
@@ -610,6 +609,16 @@ class Bench(Document):
 			action,
 			programs,
 		)
+
+	def supervisorctl_status(self):
+		result = self.docker_execute("supervisorctl status")
+		if result["status"] != "Success" or not result["output"]:
+			# Check Bench Shell Log for traceback if present
+			raise Exception("Could not fetch supervisorctl status")
+
+		output = result["output"]
+		processes = parse_supervisor_status(output)
+		return sort_supervisor_processes(processes)
 
 
 class StagingSite(Site):
@@ -970,6 +979,57 @@ def sync_bench_analytics(name):
 def convert_user_timezone_to_utc(datetime):
 	timezone = pytz.timezone(get_system_timezone())
 	return timezone.localize(datetime).astimezone(pytz.utc)
+
+
+def sort_supervisor_processes(processes: "list[SupervisorProcess]"):
+	"""
+	Sorts supervisor processes according to `status_order` and groups them
+	by process group.
+	"""
+
+	status_order = [
+		"Starting",
+		"Backoff",
+		"Running",
+		"Stopping",
+		"Stopped",
+		"Exited",
+		"Fatal",
+		"Unknown",
+	]
+	status_grouped = group_supervisor_processes(processes)
+	sorted_process_groups: "list[list[SupervisorProcess]]" = []
+	for status in status_order:
+		if not (group_grouped := status_grouped.get(status)):
+			continue
+
+		sorted_process_groups.extend(group_grouped.values())
+		del status_grouped[status]
+
+	# Incase not all statuses have been accounted for
+	for group_grouped in status_grouped.values():
+		sorted_process_groups.extend(group_grouped.values())
+
+	return flatten(sorted_process_groups)
+
+
+def group_supervisor_processes(processes: "list[SupervisorProcess]"):
+	status_grouped: "OrderedDict[str, OrderedDict[str, list[SupervisorProcess]]]" = (
+		OrderedDict()
+	)
+	for p in processes:
+		status = p.get("status")
+		group = p.get("group", "NONE")
+
+		if status not in status_grouped:
+			status_grouped[status] = OrderedDict()
+
+		group_grouped = status_grouped[status]
+		if group not in group_grouped:
+			group_grouped[group] = []
+
+		group_grouped[group].append(p)
+	return status_grouped
 
 
 get_permission_query_conditions = get_permission_query_conditions_for_doctype("Bench")

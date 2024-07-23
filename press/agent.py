@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) 2020, Frappe and contributors
 # For license information, please see license.txt
+import _io
 import json
 import os
 from datetime import date
 from typing import TYPE_CHECKING, List
 
-import _io
 import frappe
 import requests
 from frappe.utils.password import get_decrypted_password
+
 from press.utils import log_error, sanitize_config
 
 if TYPE_CHECKING:
@@ -844,7 +845,6 @@ class Agent:
 		reference_doctype=None,
 		reference_name=None,
 	):
-
 		"""
 		Check if job already exists in Undelivered, Pending, Running state
 		don't add new job until its gets comleted
@@ -967,10 +967,12 @@ class Agent:
 
 	def add_database_index(self, site, doctype, columns):
 		data = {"doctype": doctype, "columns": list(columns)}
-		return self.post(
+		return self.create_agent_job(
+			"Add Database Index",
 			f"benches/{site.bench}/sites/{site.name}/add-database-index",
-			data=data,
-		)["data"]
+			data,
+			site=site.name,
+		)
 
 	def get_jobs_status(self, ids):
 		status = self.get(f"jobs/{','.join(map(str, ids))}")
@@ -986,7 +988,8 @@ class Agent:
 
 	def update(self):
 		url = frappe.get_doc(self.server_type, self.server).get_agent_repository_url()
-		return self.post("update", data={"url": url})
+		branch = frappe.get_doc(self.server_type, self.server).get_agent_repository_branch()
+		return self.post("update", data={"url": url, "branch": branch})
 
 	def ping(self):
 		return self.get("ping")["message"]
@@ -1109,6 +1112,15 @@ class Agent:
 			"docker_cache_utils/get_cached_apps",
 			data={},
 		)
+
+	def get_site_apps(self, site):
+		raw_apps_list = self.get(
+			f"benches/{site.bench}/sites/{site.name}/apps",
+		)
+		apps: list[str] = [
+			line.split()[0] for line in raw_apps_list["data"].splitlines() if line
+		]
+		return apps
 
 
 class AgentCallbackException(Exception):

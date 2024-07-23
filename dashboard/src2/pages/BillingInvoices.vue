@@ -69,19 +69,19 @@ export default {
 					'period_start',
 					'period_end'
 				],
-				filterControls() {
+				filterControls: () => {
 					return [
 						{
 							type: 'select',
 							label: 'Type',
-							class: 'w-36',
+							class: !this.$isMobile ? 'w-36' : '',
 							fieldname: 'type',
 							options: ['', 'Subscription', 'Prepaid Credits']
 						},
 						{
 							type: 'select',
 							label: 'Status',
-							class: 'w-36',
+							class: !this.$isMobile ? 'w-36' : '',
 							fieldname: 'status',
 							options: [
 								'',
@@ -176,7 +176,8 @@ export default {
 									slots: {
 										prefix: icon('external-link')
 									},
-									onClick: () => {
+									onClick: e => {
+										e.stopPropagation();
 										if (row.stripe_invoice_url && row.payment_mode == 'Card') {
 											window.open(
 												`/api/method/press.api.client.run_doc_method?dt=Invoice&dn=${row.name}&method=stripe_payment_url`

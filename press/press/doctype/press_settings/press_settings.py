@@ -6,13 +6,13 @@
 import boto3
 import frappe
 from boto3.session import Session
-from twilio.rest import Client
 from frappe.model.document import Document
 from frappe.utils import get_url
+from twilio.rest import Client
 
 from press.api.billing import get_stripe
-from press.telegram_utils import Telegram
 from press.press.doctype.telegram_message.telegram_message import TelegramMessage
+from press.telegram_utils import Telegram
 
 
 class PressSettings(Document):
@@ -39,6 +39,7 @@ class PressSettings(Document):
 		backup_region: DF.Data | None
 		backup_rotation_scheme: DF.Literal["FIFO", "Grandfather-father-son"]
 		bench_configuration: DF.Code
+		branch: DF.Data | None
 		build_directory: DF.Data | None
 		build_server: DF.Link | None
 		central_migration_server: DF.Link | None

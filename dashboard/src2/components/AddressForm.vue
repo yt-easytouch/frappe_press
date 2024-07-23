@@ -8,39 +8,25 @@
 		/>
 		<div class="mt-4" v-show="address.country == 'India'">
 			<FormControl
+				label="I have GSTIN"
+				type="checkbox"
+				v-model="gstApplicable"
+			/>
+			<FormControl
+				class="mt-2"
 				label="GSTIN"
 				v-if="gstApplicable"
 				type="text"
 				v-model="address.gstin"
 				:disabled="!gstApplicable"
 			/>
-			<Button
-				v-if="gstApplicable"
-				class="mt-2"
-				@click="
-					update('gstin', 'Not Applicable');
-					gstApplicable = false;
-				"
-			>
-				I don't have a GSTIN
-			</Button>
-			<Button
-				v-else
-				class="mt-2"
-				@click="
-					update('gstin', '');
-					gstApplicable = true;
-				"
-			>
-				Add a GSTIN
-			</Button>
 		</div>
 	</div>
 </template>
 
 <script>
 import Form from '@/components/Form.vue';
-import { indianStates } from '@/utils/billing';
+import { indianStates } from '@/utils/billing.js';
 
 export default {
 	name: 'AddressForm',
@@ -51,12 +37,29 @@ export default {
 	},
 	data() {
 		return {
-			gstApplicable: true
+			gstApplicable: false
 		};
+	},
+	mounted() {
+		if (this.address?.gstin && this.address.gstin !== 'Not Applicable') {
+			this.gstApplicable = true;
+		} else {
+			this.update('gstin', 'Not Applicable');
+		}
 	},
 	watch: {
 		'address.gstin'(gstin) {
 			this.update('gstin', gstin);
+		},
+		gstApplicable(gstApplicable) {
+			if (gstApplicable) {
+				this.update(
+					'gstin',
+					this.address.gstin === 'Not Applicable' ? '' : this.address.gstin
+				);
+			} else {
+				this.update('gstin', 'Not Applicable');
+			}
 		}
 	},
 	resources: {
@@ -79,7 +82,9 @@ export default {
 			return {
 				url: 'press.api.billing.validate_gst',
 				makeParams() {
-					return { address: this.address };
+					return {
+						address: this.address
+					};
 				}
 			};
 		}
@@ -90,6 +95,10 @@ export default {
 				...this.address,
 				[key]: value
 			});
+		},
+		async validateGST() {
+			this.update('gstin', this.gstApplicable	? this.address.gstin : 'Not Applicable');
+			await this.$resources.validateGST.submit()
 		},
 		async validateValues() {
 			let { country } = this.address;
@@ -104,7 +113,7 @@ export default {
 			}
 
 			try {
-				await this.$resources.validateGST.submit();
+				await this.validateGST();
 			} catch (error) {
 				return error.messages?.join('\n');
 			}

@@ -11,6 +11,7 @@ from typing import Optional, TypedDict
 
 import frappe
 from frappe.model.document import Document
+
 from press.api.github import get_access_token
 from press.press.doctype.app_source.app_source import AppSource
 from press.utils import log_error
@@ -281,7 +282,6 @@ def cleanup_unused_releases():
 			order_by="creation ASC",
 		)
 		for index, release in enumerate(releases):
-
 			if deleted > 2000:
 				return
 
@@ -459,7 +459,7 @@ def check_python_syntax(dirpath: str) -> str:
 	- -o: optimize level, 0 is no optimization
 	"""
 
-	command = f"python -m compileall -q -o 0 {dirpath}"
+	command = f"python3 -m compileall -q -o 0 {dirpath}"
 	proc = subprocess.run(
 		shlex.split(command),
 		text=True,

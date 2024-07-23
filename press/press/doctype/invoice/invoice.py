@@ -3,17 +3,16 @@
 # For license information, please see license.txt
 
 import frappe
-
 from frappe import _
-from press.utils import log_error
-from frappe.utils import getdate, cint
-from frappe.utils.data import fmt_money
-from press.api.billing import get_stripe
 from frappe.model.document import Document
+from frappe.utils import cint, getdate
+from frappe.utils.data import fmt_money
 
-from press.overrides import get_permission_query_conditions_for_doctype
-from press.utils.billing import get_frappe_io_connection, convert_stripe_money
+from press.api.billing import get_stripe
 from press.api.client import dashboard_whitelist
+from press.overrides import get_permission_query_conditions_for_doctype
+from press.utils import log_error
+from press.utils.billing import convert_stripe_money, get_frappe_io_connection
 
 
 class Invoice(Document):
@@ -24,6 +23,7 @@ class Invoice(Document):
 
 	if TYPE_CHECKING:
 		from frappe.types import DF
+
 		from press.press.doctype.invoice_credit_allocation.invoice_credit_allocation import (
 			InvoiceCreditAllocation,
 		)
@@ -784,9 +784,8 @@ class Invoice(Document):
 				invoice = res.get("message")
 
 				if invoice:
-					self.frappe_invoice = invoice
+					frappe.db.set_value("Invoice", self.name, "frappe_invoice", invoice)
 					self.fetch_invoice_pdf()
-					self.save()
 					return invoice
 			else:
 				from bs4 import BeautifulSoup
@@ -843,7 +842,7 @@ class Invoice(Document):
 					}
 				)
 				ret.save(ignore_permissions=True)
-				self.invoice_pdf = ret.file_url
+				frappe.db.set_value("Invoice", self.name, "invoice_pdf", ret.file_url)
 
 	def get_frappeio_connection(self):
 		if not hasattr(self, "frappeio_connection"):
@@ -876,6 +875,9 @@ class Invoice(Document):
 			return True
 
 	def update_razorpay_transaction_details(self, payment):
+		if not (payment["fee"] or payment["tax"]):
+			return
+
 		self.transaction_amount = convert_stripe_money(payment["amount"])
 		self.transaction_net = convert_stripe_money(payment["amount"] - payment["fee"])
 		self.transaction_fee = convert_stripe_money(payment["fee"])

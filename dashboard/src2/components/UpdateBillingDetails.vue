@@ -37,8 +37,9 @@
 </template>
 
 <script>
-import AddressForm from '@/components/AddressForm.vue';
-import { notify } from '@/utils/toast';
+import { DashboardError } from '../utils/error';
+import AddressForm from './AddressForm.vue';
+import { toast } from 'vue-sonner';
 
 export default {
 	name: 'UpdateBillingDetails',
@@ -93,9 +94,7 @@ export default {
 				},
 				onSuccess() {
 					this.$emit('update:show', false);
-					notify({
-						title: 'Address updated successfully!'
-					});
+					toast.success('Address updated successfully!');
 					this.$emit('updated');
 				},
 				validate() {
@@ -103,7 +102,9 @@ export default {
 					var billingNameRegex = /^[a-zA-Z0-9\-\'\,\.\s]+$/;
 					var billingNameValid = billingNameRegex.test(billing_name);
 					if (!billingNameValid) {
-						return 'Billing Name contains invalid characters';
+						throw new DashboardError(
+							'Billing Name contains invalid characters'
+						);
 					}
 					this.billingInformation.billing_name = billing_name;
 					return this.$refs['address-form'].validateValues();

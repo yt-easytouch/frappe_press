@@ -29,12 +29,31 @@ from press.utils.billing import get_frappe_io_connection
 
 
 @frappe.whitelist()
+def get(app):
+	record = frappe.get_doc("Marketplace App", app)
+	return {
+		"name": record.name,
+		"title": record.title,
+		"description": record.description,
+		"image": record.image,
+	}
+
+
+@frappe.whitelist()
 def get_install_app_options(marketplace_app: str):
 	"""Get options for installing a marketplace app"""
 
 	is_app_approved = frappe.db.get_value(
 		"Marketplace App", marketplace_app, "frappe_approved"
 	)
+
+	restricted_site_plan_release_group = frappe.get_all(
+		"Site Plan Release Group", fields=["parent", "release_group"], ignore_permissions=True
+	)
+	restricted_site_plans = [x.parent for x in restricted_site_plan_release_group]
+	restricted_release_groups = [
+		x.release_group for x in restricted_site_plan_release_group
+	]
 
 	private_site_plan = frappe.db.get_value(
 		"Site Plan",
@@ -44,7 +63,12 @@ def get_install_app_options(marketplace_app: str):
 
 	public_site_plan = frappe.db.get_value(
 		"Site Plan",
-		{"private_benches": 0, "document_type": "Site", "price_inr": ["!=", 0]},
+		{
+			"private_benches": 0,
+			"document_type": "Site",
+			"price_inr": ["!=", 0],
+			"name": ["not in", restricted_site_plans],
+		},
 		order_by="price_inr asc",
 	)
 
@@ -55,7 +79,11 @@ def get_install_app_options(marketplace_app: str):
 	)[0]
 	latest_public_group = frappe.db.get_value(
 		"Release Group",
-		filters={"public": 1, "version": latest_stable_version},
+		filters={
+			"public": 1,
+			"version": latest_stable_version,
+			"name": ("not in", restricted_release_groups),
+		},
 	)
 	proxy_servers = frappe.db.get_all(
 		"Proxy Server",
@@ -525,6 +553,15 @@ def options_for_marketplace_app() -> Dict[str, Dict]:
 	return marketplace_options
 
 
+@frappe.whitelist()
+def get_marketplace_apps_for_onboarding() -> List[Dict]:
+	return frappe.get_all(
+		"Marketplace App",
+		fields=["name", "title", "image", "description"],
+		filters={"show_for_site_creation": True, "status": "Published"},
+	)
+
+
 def is_on_marketplace(app: str) -> bool:
 	"""Returns `True` if this `app` is on marketplace else `False`"""
 	return frappe.db.exists("Marketplace App", app)
@@ -669,7 +706,6 @@ def get_app_info(app: str):
 
 @frappe.whitelist()
 def get_apps_with_plans(apps, release_group: str):
-
 	if isinstance(apps, str):
 		apps = json.loads(apps)
 
@@ -839,7 +875,6 @@ def create_app_plan(marketplace_app: str, plan_data: Dict):
 
 @frappe.whitelist()
 def update_app_plan(app_plan_name: str, updated_plan_data: Dict):
-
 	if not updated_plan_data.get("title"):
 		frappe.throw("Plan title is required")
 
@@ -981,7 +1016,6 @@ def get_discount_percent(plan, discount=0.0):
 
 @frappe.whitelist(allow_guest=True)
 def login_via_token(token, team, site):
-
 	if not token or not isinstance(token, str):
 		frappe.throw("Invalid Token")
 
@@ -1039,7 +1073,12 @@ def subscriptions():
 def branches(name):
 	from press.api.github import branches as git_branches
 
-	app_source = frappe.get_doc("App Source", name)
+	app_source = frappe.db.get_value(
+		"App Source",
+		name,
+		["github_installation_id", "repository_owner", "repository"],
+		as_dict=True,
+	)
 	installation_id = app_source.github_installation_id
 	repo_owner = app_source.repository_owner
 	repo_name = app_source.repository
@@ -1056,16 +1095,18 @@ def change_branch(name, source, version, to_branch):
 
 @protected("Marketplace App")
 @frappe.whitelist()
-def options_for_version(name, source):
+def options_for_version(name):
 	frappe_version = frappe.get_all("Frappe Version", {"public": True}, pluck="name")
 	added_versions = frappe.get_all(
 		"Marketplace App Version", {"parent": name}, pluck="version"
 	)
-	branchesList = branches(source)
+	app = frappe.db.get_value("Marketplace App", name, "app")
+	source = frappe.get_value("App Source", {"app": app})
+	branches_list = branches(source)
 	versions = list(set(frappe_version).difference(set(added_versions)))
-	branchesList = [branch["name"] for branch in branchesList]
+	branches_list = [branch["name"] for branch in branches_list]
 
-	return [{"version": version, "branch": branchesList} for version in versions]
+	return [{"version": version, "branch": branches_list} for version in versions]
 
 
 @protected("Marketplace App")

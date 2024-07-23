@@ -16,6 +16,7 @@ from frappe.core.utils import find
 from frappe.installer import subprocess
 from frappe.model.document import Document
 from frappe.utils.user import is_system_user
+
 from press.agent import Agent
 from press.api.client import dashboard_whitelist
 from press.overrides import get_permission_query_conditions_for_doctype
@@ -25,6 +26,7 @@ from press.utils import log_error
 
 if typing.TYPE_CHECKING:
 	from press.press.doctype.press_job.press_job import Bench
+	from press.press.doctype.virtual_machine.virtual_machine import VirtualMachine
 
 
 class BaseServer(Document, TagHelpers):
@@ -290,6 +292,11 @@ class BaseServer(Document, TagHelpers):
 		url = f"https://github.com/{repository_owner}/agent"
 		return url
 
+	def get_agent_repository_branch(self):
+		settings = frappe.get_single("Press Settings")
+		branch = settings.branch or "master"
+		return branch
+
 	@frappe.whitelist()
 	def ping_agent(self):
 		agent = Agent(self.name, self.doctype)
@@ -422,7 +429,10 @@ class BaseServer(Document, TagHelpers):
 		try:
 			ansible = Ansible(
 				playbook="update_agent.yml",
-				variables={"agent_repository_url": self.get_agent_repository_url()},
+				variables={
+					"agent_repository_url": self.get_agent_repository_url(),
+					"agent_repository_branch": self.get_agent_repository_branch(),
+				},
 				server=self,
 				user=self.ssh_user or "root",
 				port=self.ssh_port or 22,
@@ -529,7 +539,9 @@ class BaseServer(Document, TagHelpers):
 	def increase_disk_size(self, increment=50):
 		if self.provider not in ("AWS EC2", "OCI"):
 			return
-		virtual_machine = frappe.get_doc("Virtual Machine", self.virtual_machine)
+		virtual_machine: "VirtualMachine" = frappe.get_doc(
+			"Virtual Machine", self.virtual_machine
+		)
 		virtual_machine.increase_disk_size(increment)
 		if self.provider == "AWS EC2":
 			self.enqueue_extend_ec2_volume()
@@ -1032,6 +1044,7 @@ class Server(BaseServer):
 
 	if TYPE_CHECKING:
 		from frappe.types import DF
+
 		from press.press.doctype.resource_tag.resource_tag import ResourceTag
 
 		agent_password: DF.Password | None
