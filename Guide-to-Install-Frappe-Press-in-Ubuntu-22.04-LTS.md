@@ -169,7 +169,11 @@ A software like ERPNext, which is built on Frappe Framework, requires a number o
     sudo bench setup production [frappe-user]
 
     bench set-maintenance-mode off
-    bench start
+    bench setup socketio
+    bench setup supervisor
+    bench setup redis
+    sudo supervisorctl reload
+  
 
 ### Generating Your SSH Public Key 
       ssh-keygen -o
