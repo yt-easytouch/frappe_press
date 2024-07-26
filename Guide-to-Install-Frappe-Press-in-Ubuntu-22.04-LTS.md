@@ -170,3 +170,6 @@ A software like ERPNext, which is built on Frappe Framework, requires a number o
 
     bench set-maintenance-mode off
     bench start
+
+### Generating Your SSH Public Key 
+      ssh-keygen -o
