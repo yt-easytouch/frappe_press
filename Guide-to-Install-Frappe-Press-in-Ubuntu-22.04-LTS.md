@@ -177,3 +177,7 @@ A software like ERPNext, which is built on Frappe Framework, requires a number o
 
 ### Generating Your SSH Public Key 
       ssh-keygen -o
+
+### Install the certbot-dns-route53 plugin:
+pip3 install certbot-dns-route53
+sudo apt install python3-certbot-dns-route53
