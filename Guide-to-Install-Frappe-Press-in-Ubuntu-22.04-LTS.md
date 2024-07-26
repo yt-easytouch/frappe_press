@@ -25,6 +25,9 @@ A complete Guide to Install Frappe Bench in Ubuntu 22.04 LTS and install Frappe/
       su [frappe-user] 
       cd /home/[frappe-user]
       Ensure you have replaced [frappe-user] with your username. eg. sudo adduser frappe
+      add this file 
+      nano ~/.bashrc
+      PATH=$PATH:~/.local/bin/
 
 ####  Install Required Packages
 A software like ERPNext, which is built on Frappe Framework, requires a number of packages in order to run smoothly. These are the packages we will be installing in this step.
