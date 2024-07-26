@@ -503,7 +503,7 @@ class Invoice(Document):
 					)
 
 	def validate_team(self):
-		team = frappe.get_cached_doc("Team", self.team)
+		team = frappe.get_doc("Team", self.team)
 
 		self.customer_name = team.billing_name or frappe.utils.get_fullname(self.team)
 		self.customer_email = (
@@ -649,7 +649,11 @@ class Invoice(Document):
 			if item.discount_percentage:
 				item.discount = item.amount * (item.discount_percentage / 100)
 
-		self.total_discount_amount = sum([item.discount for item in self.items])
+		self.total_discount_amount = sum([item.discount for item in self.items]) + sum(
+			[d.amount for d in self.discounts]
+		)
+		# TODO: handle percent discount from discount table
+
 		self.total_before_discount = self.total
 		self.total = self.total_before_discount - self.total_discount_amount
 
