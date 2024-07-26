@@ -53,14 +53,16 @@ A software like ERPNext, which is built on Frappe Framework, requires a number o
     sudo apt-get install libmysqlclient-dev -y
 
 ###  Edit the mariadb configuration ( unicode character encoding )
-      sudo nano /etc/mysql/my.cnf
-      add this to the my.cnf  file
-      [mysqld]
-      character-set-client-handshake = FALSE
-      character-set-server = utf8mb4
-      collation-server = utf8mb4_unicode_ci
-      [mysql]
-      default-character-set = utf8mb4
+
+    sudo nano /etc/mysql/my.cnf
+    add this to the my.cnf  file
+
+    [mysqld]
+    character-set-client-handshake = FALSE
+    character-set-server = utf8mb4
+    collation-server = utf8mb4_unicode_ci
+    [mysql]
+    default-character-set = utf8mb4
    
 ### Restart the MYSQL Server
    sudo service mysql restart
