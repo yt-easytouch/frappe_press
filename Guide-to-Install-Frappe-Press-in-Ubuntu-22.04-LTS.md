@@ -183,9 +183,9 @@ pip3 install certbot-dns-route53
 sudo apt install python3-certbot-dns-route53
 
 ## Docker
-sudo usermod -aG docker $USER
-newgrp docker
-groups
-docker login -u [user] --password-stdin registry.gitlab.com
-echo "[token]" | docker login -u [user] --password-stdin registry.gitlab.com
+      sudo usermod -aG docker $USER
+      newgrp docker
+      groups
+      docker login -u [user] --password-stdin registry.gitlab.com
+      echo "[token]" | docker login -u [user] --password-stdin registry.gitlab.com
 
