@@ -56,7 +56,7 @@
 					<FormControl
 						label="Preferred Payment Method"
 						type="select"
-						:options="['Frappe Cloud Credits', 'Bank Transfer', 'PayPal']"
+						:options="['Easytouch Cloud Credits', 'Bank Transfer', 'PayPal']"
 						v-model="payoutMethod"
 					/>
 
@@ -68,7 +68,7 @@
 
 					<FormControl
 						label="GSTIN (if applicable)"
-						v-if="payoutMethod != 'Frappe Cloud Credits'"
+						v-if="payoutMethod != 'Easytouch Cloud Credits'"
 						v-model="gstin"
 					/>
 

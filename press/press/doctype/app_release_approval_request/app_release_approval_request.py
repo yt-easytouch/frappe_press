@@ -128,7 +128,7 @@ class AppReleaseApprovalRequest(Document):
 
 		frappe.sendmail(
 			[publisher_email],
-			subject=f"Frappe Cloud Marketplace: {marketplace_app.title}",
+			subject=f"Easytouch Cloud Marketplace: {marketplace_app.title}",
 			args={
 				"subject": "Update on your app release publish request",
 				"status": self.status,
