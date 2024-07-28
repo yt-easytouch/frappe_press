@@ -621,7 +621,7 @@
   {
    "group": "Related Documents",
    "link_doctype": "Subscription",
-   "link_fieldname": "document_name"
+   "link_fieldname": "site"
   },
   {
    "group": "Logs",
@@ -654,7 +654,7 @@
    "link_fieldname": "site"
   }
  ],
- "modified": "2024-06-28 16:18:55.869153",
+ "modified": "2024-07-28 22:17:43.749656",
  "modified_by": "Administrator",
  "module": "Press",
  "name": "Site",

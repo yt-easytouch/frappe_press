@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\":\"vY-Rf5Z3XJ\",\"type\":\"header\",\"data\":{\"text\":\"<span style=\\\"font-size: 18px; letter-spacing: 0.18px;\\\"><b>Press</b></span>\",\"col\":12}},{\"id\":\"3oSTJT-zdw\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Active Servers\",\"col\":3}},{\"id\":\"mCJVnIs4Nk\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Database Servers\",\"col\":3}},{\"id\":\"KeKF9pnEMD\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Proxy Servers\",\"col\":3}},{\"id\":\"Q-XnmvoY_Z\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Active Benches\",\"col\":3}},{\"id\":\"M8qDVSiCm2\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Active Sites\",\"col\":3}},{\"id\":\"69WDKZy8iG\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Pending Jobs\",\"col\":3}},{\"id\":\"NDVuWnHaWS\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"4hOrPL3uuL\",\"type\":\"card\",\"data\":{\"card_name\":\"Site\",\"col\":4}},{\"id\":\"ePoBJsNNCK\",\"type\":\"card\",\"data\":{\"card_name\":\"Payments\",\"col\":4}},{\"id\":\"Em2aFpCXMW\",\"type\":\"card\",\"data\":{\"card_name\":\"Infrastructure\",\"col\":4}},{\"id\":\"iGHDqKEzrS\",\"type\":\"card\",\"data\":{\"card_name\":\"Apps\",\"col\":4}},{\"id\":\"Na5fsvYzxj\",\"type\":\"card\",\"data\":{\"card_name\":\"Teams\",\"col\":4}},{\"id\":\"snu2iUVaVO\",\"type\":\"card\",\"data\":{\"card_name\":\"Updates\",\"col\":4}},{\"id\":\"_mUReFctET\",\"type\":\"card\",\"data\":{\"card_name\":\"Settings\",\"col\":4}}]",
+ "content": "[{\"id\":\"vY-Rf5Z3XJ\",\"type\":\"header\",\"data\":{\"text\":\"<span style=\\\"font-size: 18px; letter-spacing: 0.18px;\\\"><b>Press</b></span>\",\"col\":12}},{\"id\":\"3oSTJT-zdw\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Active Servers\",\"col\":3}},{\"id\":\"mCJVnIs4Nk\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Database Servers\",\"col\":3}},{\"id\":\"KeKF9pnEMD\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Proxy Servers\",\"col\":3}},{\"id\":\"Q-XnmvoY_Z\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Active Benches\",\"col\":3}},{\"id\":\"M8qDVSiCm2\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Active Sites\",\"col\":3}},{\"id\":\"69WDKZy8iG\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Pending Jobs\",\"col\":3}},{\"id\":\"NDVuWnHaWS\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"4hOrPL3uuL\",\"type\":\"card\",\"data\":{\"card_name\":\"Site\",\"col\":4}},{\"id\":\"ePoBJsNNCK\",\"type\":\"card\",\"data\":{\"card_name\":\"Payments\",\"col\":4}},{\"id\":\"Em2aFpCXMW\",\"type\":\"card\",\"data\":{\"card_name\":\"Infrastructure\",\"col\":4}},{\"id\":\"iGHDqKEzrS\",\"type\":\"card\",\"data\":{\"card_name\":\"Apps\",\"col\":4}},{\"id\":\"Na5fsvYzxj\",\"type\":\"card\",\"data\":{\"card_name\":\"Teams\",\"col\":4}},{\"id\":\"snu2iUVaVO\",\"type\":\"card\",\"data\":{\"card_name\":\"Updates\",\"col\":4}},{\"id\":\"_mUReFctET\",\"type\":\"card\",\"data\":{\"card_name\":\"Settings\",\"col\":4}},{\"id\":\"JWN5FHmj9t\",\"type\":\"card\",\"data\":{\"card_name\":\"Marketplace\",\"col\":4}}]",
  "creation": "2024-06-09 17:00:57.451087",
  "custom_blocks": [],
  "docstatus": 0,
@@ -12,25 +12,6 @@
  "is_hidden": 0,
  "label": "MyPress",
  "links": [
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Site",
-   "link_count": 1,
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Card Break"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Site",
-   "link_count": 0,
-   "link_to": "Site",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
   {
    "hidden": 0,
    "is_query_report": 0,
@@ -84,25 +65,6 @@
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Payments",
-   "link_count": 1,
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Card Break"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Invoice",
-   "link_count": 0,
-   "link_to": "Invoice",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
    "label": "Payment Ledger Entry",
    "link_count": 0,
    "link_to": "Payment Ledger Entry",
@@ -116,25 +78,6 @@
    "label": "Plan",
    "link_count": 0,
    "link_to": "Site Plan",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Infrastructure",
-   "link_count": 1,
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Card Break"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Server",
-   "link_count": 0,
-   "link_to": "Server",
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
@@ -175,25 +118,6 @@
    "label": "Site",
    "link_count": 0,
    "link_to": "Site",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Apps",
-   "link_count": 1,
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Card Break"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "App",
-   "link_count": 0,
-   "link_to": "App",
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
@@ -314,9 +238,294 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Apps",
+   "link_count": 6,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "App",
+   "link_count": 0,
+   "link_to": "App",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Release Group",
+   "link_count": 0,
+   "link_to": "Release Group",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "App Release",
+   "link_count": 0,
+   "link_to": "App Release",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "App Tag",
+   "link_count": 0,
+   "link_to": "App Tag",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "GitHub Webhook Log",
+   "link_count": 0,
+   "link_to": "GitHub Webhook Log",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Marketplace App",
+   "link_count": 0,
+   "link_to": "Marketplace App",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Infrastructure",
+   "link_count": 5,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Server",
+   "link_count": 0,
+   "link_to": "Server",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Database Server",
+   "link_count": 0,
+   "link_to": "Database Server",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Proxy Server",
+   "link_count": 0,
+   "link_to": "Proxy Server",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Bench",
+   "link_count": 0,
+   "link_to": "Bench",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Site",
+   "link_count": 0,
+   "link_to": "Site",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Site",
+   "link_count": 6,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Site",
+   "link_count": 0,
+   "link_to": "Site",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Site Activity",
+   "link_count": 0,
+   "link_to": "Site Activity",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Site Update",
+   "link_count": 0,
+   "link_to": "Site Update",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Site Backup",
+   "link_count": 0,
+   "link_to": "Site Backup",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Site Domain",
+   "link_count": 0,
+   "link_to": "Site Domain",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Site Usage",
+   "link_count": 0,
+   "link_to": "Site Usage",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Marketplace",
+   "link_count": 3,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Apps",
+   "link_count": 0,
+   "link_to": "Marketplace App",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "App Category",
+   "link_count": 0,
+   "link_to": "Marketplace App Category",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Settings",
+   "link_count": 0,
+   "link_to": "Marketplace Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Payments",
+   "link_count": 4,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Invoice",
+   "link_count": 0,
+   "link_to": "Invoice",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Payment Ledger Entry",
+   "link_count": 0,
+   "link_to": "Payment Ledger Entry",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Plan",
+   "link_count": 0,
+   "link_to": "Site Plan",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Subscription",
+   "link_count": 0,
+   "link_to": "Subscription",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
- "modified": "2024-06-09 18:02:29.415202",
+ "modified": "2024-07-28 21:50:49.986151",
  "modified_by": "Administrator",
  "module": "Press",
  "name": "MyPress",

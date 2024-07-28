@@ -8,7 +8,7 @@ from frappe.utils import rounded
 
 from press.agent import Agent
 from press.press.doctype.server.server import Server
-from press.press.doctype.subscription.subscription import (
+from press.press.doctype.subscription1.subscription import (
 	created_usage_records,
 	paid_plans,
 	sites_with_free_hosting,
