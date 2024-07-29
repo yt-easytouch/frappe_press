@@ -65,16 +65,6 @@
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Payment Ledger Entry",
-   "link_count": 0,
-   "link_to": "Payment Ledger Entry",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
    "label": "Plan",
    "link_count": 0,
    "link_to": "Site Plan",
@@ -311,65 +301,6 @@
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Infrastructure",
-   "link_count": 5,
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Card Break"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Server",
-   "link_count": 0,
-   "link_to": "Server",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Database Server",
-   "link_count": 0,
-   "link_to": "Database Server",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Proxy Server",
-   "link_count": 0,
-   "link_to": "Proxy Server",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Bench",
-   "link_count": 0,
-   "link_to": "Bench",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Site",
-   "link_count": 0,
-   "link_to": "Site",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
    "label": "Site",
    "link_count": 6,
    "link_type": "DocType",
@@ -497,16 +428,6 @@
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Payment Ledger Entry",
-   "link_count": 0,
-   "link_to": "Payment Ledger Entry",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
    "label": "Plan",
    "link_count": 0,
    "link_to": "Site Plan",
@@ -523,9 +444,88 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Infrastructure",
+   "link_count": 7,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Server",
+   "link_count": 0,
+   "link_to": "Server",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Database Server",
+   "link_count": 0,
+   "link_to": "Database Server",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Proxy Server",
+   "link_count": 0,
+   "link_to": "Proxy Server",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Bench",
+   "link_count": 0,
+   "link_to": "Bench",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Site",
+   "link_count": 0,
+   "link_to": "Site",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Log Server",
+   "link_count": 0,
+   "link_to": "Log Server",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Monitor Server",
+   "link_count": 0,
+   "link_to": "Monitor Server",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
- "modified": "2024-07-28 21:50:49.986151",
+ "modified": "2024-07-29 14:51:53.887402",
  "modified_by": "Administrator",
  "module": "Press",
  "name": "MyPress",
