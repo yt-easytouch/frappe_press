@@ -3,7 +3,7 @@
 		<div class="prose prose-sm max-w-none">
 			<h1 class="text-2xl font-semibold">Welcome to Easytouch Cloud</h1>
 			<p>
-				Easytouch Cloud makes it easy to manage sites and apps like ERPNext in an
+				Easytouch Cloud makes it easy to manage sites and apps like Easytouch ERP in an
 				easy to use dashboard with powerful features like automatic backups,
 				custom domains, SSL certificates, custom apps, automatic updates and
 				more.

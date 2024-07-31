@@ -525,7 +525,7 @@
    "type": "Link"
   }
  ],
- "modified": "2024-07-29 14:51:53.887402",
+ "modified": "2024-07-30 16:57:44.659274",
  "modified_by": "Administrator",
  "module": "Press",
  "name": "MyPress",
@@ -542,6 +542,14 @@
    "label": "Active Servers",
    "link_to": "Server",
    "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Pending Jobs",
+   "link_to": "Agent Job",
+   "stats_filter": "[[\"Agent Job\",\"status\",\"=\",\"Pending\",false]]",
    "type": "DocType"
   },
   {
@@ -573,14 +581,6 @@
    "doc_view": "List",
    "label": "Active Sites",
    "link_to": "Site",
-   "stats_filter": "[]",
-   "type": "DocType"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "List",
-   "label": "Pending Jobs",
-   "link_to": "Agent Job",
    "stats_filter": "[]",
    "type": "DocType"
   }
