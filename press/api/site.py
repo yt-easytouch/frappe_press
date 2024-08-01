@@ -33,7 +33,6 @@ from press.utils import (
 	get_frappe_backups,
 	get_last_doc,
 	has_role,
-	is_allowed_access_to_restricted_site_plans,
 	log_error,
 	unique,
 )
@@ -709,11 +708,11 @@ def get_site_plans():
 		filters={"document_type": "Site"},
 	)
 
-	filtered_plans = []
-
-	has_team_access_to_restricted_site_plans = is_allowed_access_to_restricted_site_plans()
-
 	plan_names = [x.name for x in plans]
+	if len(plan_names) == 0:
+		return []
+	
+	filtered_plans = []
 
 	SitePlan = frappe.qb.DocType("Site Plan")
 	Bench = frappe.qb.DocType("Bench")
@@ -777,13 +776,6 @@ def get_site_plans():
 			plan_details_dict[plan["name"]]["bench_versions"].append(plan["version"])
 
 	for plan in plans:
-		# If release_group isn't empty (means Restricted Site Plan) and team has not access to this kind of plan, Skip the plan
-		if (
-			not has_team_access_to_restricted_site_plans
-			and plan.name in plan_details_dict
-			and plan_details_dict[plan.name]["release_groups"]
-		):
-			continue
 		if plan.name in plan_details_dict:
 			plan.clusters = plan_details_dict[plan.name]["clusters"]
 			plan.allowed_apps = plan_details_dict[plan.name]["allowed_apps"]
@@ -1548,7 +1540,7 @@ def check_dns_cname_a(name, domain):
 					{"status": "Active", "primary": proxy, "is_replication_setup": True},
 					pluck="ip",
 				)
-				if site_ip in secondary_ips:
+				if domain_ip in secondary_ips:
 					result["matched"] = True
 		except dns.exception.DNSException as e:
 			result["answer"] = str(e)
@@ -2120,7 +2112,9 @@ def version_upgrade(
 		if destination_group:
 			destination_group = destination_group[0]
 		else:
-			frappe.throw(f"There are no public benches with {next_version}.")
+			frappe.throw(
+				f"There are no public benches with the version {frappe.bold(next_version)}."
+			)
 
 	version_upgrade = frappe.get_doc(
 		{

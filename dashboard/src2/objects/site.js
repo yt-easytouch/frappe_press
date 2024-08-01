@@ -42,6 +42,7 @@ export default {
 		moveToBench: 'move_to_bench',
 		moveToGroup: 'move_to_group',
 		loginAsAdmin: 'login_as_admin',
+		loginAsTeam: 'login_as_team',
 		isSetupWizardComplete: 'is_setup_wizard_complete',
 		reinstall: 'reinstall',
 		removeDomain: 'remove_domain',
@@ -221,14 +222,14 @@ export default {
 			if (
 				(site.doc.server_team == $team.doc?.name &&
 					site.doc.group_team == $team.doc?.name) ||
-				$team.doc.is_desk_user
+				$team.doc?.is_desk_user
 			) {
 				breadcrumbs.push({
 					label: site.doc?.server_title || site.doc?.server,
 					route: `/servers/${site.doc?.server}`
 				});
 			}
-			if (site.doc.group_team == $team.doc?.name || $team.doc.is_desk_user) {
+			if (site.doc.group_team == $team.doc?.name || $team.doc?.is_desk_user) {
 				breadcrumbs.push(
 					{
 						label: site.doc?.group_title,
@@ -279,7 +280,7 @@ export default {
 					columns: [
 						{
 							label: 'App',
-							fieldname: 'app',
+							fieldname: 'title',
 							width: 1,
 							suffix(row) {
 								if (!row.is_app_patched) {
@@ -331,141 +332,17 @@ export default {
 								prefix: icon('plus')
 							},
 							onClick() {
+								const InstallAppDialog = defineAsyncComponent(() =>
+									import('../components/site/InstallAppDialog.vue')
+								);
+
 								renderDialog(
-									h(
-										GenericDialog,
-										{
-											options: {
-												title: 'Install app on your site',
-												size: '4xl'
-											}
-										},
-										{
-											default: () =>
-												h(ObjectList, {
-													options: {
-														label: 'App',
-														fieldname: 'app',
-														fieldtype: 'ListSelection',
-														emptyStateMessage:
-															'No apps found' +
-															(!site.doc?.group_public
-																? '. Please add them from your bench.'
-																: ''),
-														columns: [
-															{
-																label: 'Title',
-																fieldname: 'title',
-																class: 'font-medium',
-																width: 2
-															},
-															{
-																label: 'Repo',
-																fieldname: 'repository_owner',
-																class: 'text-gray-600'
-															},
-															{
-																label: 'Branch',
-																fieldname: 'branch',
-																class: 'text-gray-600'
-															},
-															{
-																label: '',
-																fieldname: '',
-																align: 'right',
-																type: 'Button',
-																width: '5rem',
-																Button({ row }) {
-																	return {
-																		label: 'Install',
-																		onClick() {
-																			if (site.installApp.loading) return;
-
-																			if (row.plans) {
-																				let SiteAppPlanSelectDialog =
-																					defineAsyncComponent(() =>
-																						import(
-																							'../components/site/SiteAppPlanSelectDialog.vue'
-																						)
-																					);
-
-																				renderDialog(
-																					h(SiteAppPlanSelectDialog, {
-																						app: row,
-																						currentPlan: null,
-																						onPlanSelected(plan) {
-																							toast.promise(
-																								site.installApp.submit({
-																									app: row.app,
-																									plan: plan.name
-																								}),
-																								{
-																									loading: 'Installing app...',
-																									success: jobId => {
-																										apps.reload();
-																										router.push({
-																											name: 'Site Job',
-																											params: {
-																												name: site.name,
-																												id: jobId
-																											}
-																										});
-																										return 'App will be installed shortly';
-																									},
-																									error: e => {
-																										return e.messages?.length
-																											? e.messages.join('\n')
-																											: e.message;
-																									}
-																								}
-																							);
-																						}
-																					})
-																				);
-																			} else {
-																				toast.promise(
-																					site.installApp.submit({
-																						app: row.app
-																					}),
-																					{
-																						loading: 'Installing app...',
-																						success: jobId => {
-																							apps.reload();
-																							router.push({
-																								name: 'Site Job',
-																								params: {
-																									name: site.name,
-																									id: jobId
-																								}
-																							});
-																							return 'App will be installed shortly';
-																						},
-																						error: e => {
-																							return e.messages?.length
-																								? e.messages.join('\n')
-																								: e.message;
-																						}
-																					}
-																				);
-																			}
-																		}
-																	};
-																}
-															}
-														],
-														resource() {
-															return {
-																url: 'press.api.site.available_apps',
-																params: {
-																	name: site.doc?.name
-																},
-																auto: true
-															};
-														}
-													}
-												})
+									h(InstallAppDialog, {
+										site: site.name,
+										onInstalled() {
+											apps.reload();
 										}
-									)
+									})
 								);
 							}
 						};
@@ -1398,13 +1275,15 @@ export default {
 				type: 'Component',
 				condition() {
 					const team = getTeam();
-					return !!team.doc?.enable_performance_tuning;
+					return (
+						!!team.doc?.enable_performance_tuning || team.doc?.is_desk_user
+					);
 				},
 				component: defineAsyncComponent(() =>
 					import('../components/site/SitePerformance.vue')
 				),
 				props: site => {
-					return { siteName: site.doc?.name };
+					return { siteName: site.doc?.name, siteVersion: site.doc?.version };
 				}
 			},
 			logsTab(),
