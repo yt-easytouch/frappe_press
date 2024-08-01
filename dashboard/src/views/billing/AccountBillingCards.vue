@@ -85,7 +85,7 @@
 					href="https://frappecloud.com/docs/billing/disable-account"
 					>cancelling subscription.</Link
 				>
-				Frappe Cloud is not responsible for any refund if the account is not
+				Easytouch Cloud is not responsible for any refund if the account is not
 				closed properly.
 			</span>
 		</template>

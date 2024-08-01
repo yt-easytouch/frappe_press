@@ -132,6 +132,7 @@ class AccountRequest(Document):
 			print()
 			return
 
+
 		subject = f"{self.otp} - OTP for Frappe Cloud Account Verification"
 		args = {}
 
@@ -145,15 +146,14 @@ class AccountRequest(Document):
 			template = "verify_account"
 
 			if self.invited_by and self.role != "Press Admin":
-				subject = f"You are invited by {self.invited_by} to join Frappe Cloud"
+				subject = f"You are invited by {self.invited_by} to join Easytouch Cloud"
 				template = "invite_team_member"
-
+		logo = frappe.get_website_settings("app_logo") or frappe.get_hooks("app_logo_url")[-1]
 		args.update(
 			{
 				"invited_by": self.invited_by,
 				"link": url,
-				# "image_path": "/assets/press/images/frappe-logo-black.png",
-				"image_path": "https://github.com/frappe/gameplan/assets/9355208/447035d0-0686-41d2-910a-a3d21928ab94",
+				 "image_path": logo,
 				"read_pixel_path": get_url(
 					f"/api/method/press.utils.telemetry.capture_read_event?email={self.email}"
 				),
@@ -170,6 +170,7 @@ class AccountRequest(Document):
 			args=args,
 			now=True,
 		)
+		
 
 	def get_verification_url(self):
 		if self.saas:

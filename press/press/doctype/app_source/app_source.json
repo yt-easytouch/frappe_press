@@ -156,7 +156,7 @@
   {
    "default": "0",
    "depends_on": "eval:doc.uninstalled",
-   "description": "If uninstalled it means Frappe Cloud App was removed by user from GitHub. GitHub Installation ID has been invalidated, <i>Create Release</i> or <i>Clone</i> (from a linked App Release) will not work.",
+   "description": "If uninstalled it means Easytouch Cloud App was removed by user from GitHub. GitHub Installation ID has been invalidated, <i>Create Release</i> or <i>Clone</i> (from a linked App Release) will not work.",
    "fieldname": "uninstalled",
    "fieldtype": "Check",
    "label": "Uninstalled",
