@@ -133,14 +133,14 @@ class AccountRequest(Document):
 			return
 
 
-		subject = f"{self.otp} - OTP for Frappe Cloud Account Verification"
+		subject = f"{self.otp} - OTP for Easytouch Cloud Account Verification"
 		args = {}
 
 		custom_template = self.saas_app and frappe.db.get_value(
 			"Marketplace App", self.saas_app, "custom_verify_template"
 		)
 		if self.product_trial or custom_template:
-			subject = "Verify your email for Frappe"
+			subject = "Verify your email for Easytouch"
 			template = "saas_verify_account"
 		else:
 			template = "verify_account"
