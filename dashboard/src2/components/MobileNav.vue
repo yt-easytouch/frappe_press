@@ -4,7 +4,7 @@
 			<span class="font-semibold">
 				<router-link :to="{ name: 'Site List' }">
 					<img
-						:src="`/assets/press/images/frappecloud-logo.png`"
+						:src="`/assets/press/images/easytouch_logo.png`"
 						class="h-7 w-7 shrink-0"
 						alt="Easytouch Cloud Logo"
 					/>

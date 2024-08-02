@@ -4,7 +4,7 @@
 			<div class="flex" @dblclick="redirectForFrappeioAuth">
 				<slot name="logo">
 					<div class="mx-auto flex items-center space-x-2">
-						<FCLogo class="inline-block h-7 w-7" />
+						<ETLogo class="inline-block h-7 w-7" />
 						<span
 							class="select-none text-xl font-semibold tracking-tight text-gray-900"
 						>
@@ -27,22 +27,22 @@
 			</div>
 		</div>
 		<div class="absolute bottom-4 z-[1] flex w-full justify-center">
-			<FrappeLogo class="h-4" />
+			<YooltechLogo class="h-8" />
 		</div>
 	</div>
 </template>
 
 <script>
-import FCLogo from '@/components/icons/FCLogo.vue';
-import FrappeLogo from '@/components/icons/FrappeLogo.vue';
+import ETLogo from '@/components/icons/ETLogo.vue';
+import YooltechLogo from '@/components/icons/YooltechLogo.vue';
 import { notify } from '@/utils/toast';
 
 export default {
 	name: 'LoginBox',
 	props: ['title', 'logo'],
 	components: {
-		FCLogo,
-		FrappeLogo
+		ETLogo,
+		YooltechLogo
 	},
 	mounted() {
 		const params = new URLSearchParams(window.location.search);
