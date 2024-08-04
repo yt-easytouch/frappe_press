@@ -9,6 +9,7 @@
   "app",
   "app_title",
   "frappe",
+  "auto_install",
   "enabled",
   "repository_url",
   "data_3",
@@ -121,7 +122,7 @@
    "fetch_if_empty": 1,
    "fieldname": "frappe",
    "fieldtype": "Check",
-   "label": "Frappe"
+   "label": "Main App"
   },
   {
    "default": "1",
@@ -161,6 +162,14 @@
    "fieldtype": "Check",
    "label": "Uninstalled",
    "read_only": 1
+  },
+  {
+   "default": "0",
+   "fetch_from": "app.frappe",
+   "fetch_if_empty": 1,
+   "fieldname": "auto_install",
+   "fieldtype": "Check",
+   "label": "Auto Install"
   }
  ],
  "index_web_pages_for_search": 1,
@@ -170,7 +179,7 @@
    "link_fieldname": "reference_name"
   }
  ],
- "modified": "2024-04-05 10:12:54.374115",
+ "modified": "2024-08-04 17:10:33.541969",
  "modified_by": "Administrator",
  "module": "Press",
  "name": "App Source",

@@ -184,7 +184,7 @@
 					class="checkbox"
 					type="checkbox"
 					v-model="agreedToRegionConsent"
-					:label="`I agree that the laws of the region selected by me (${selectedClusterTitle}) shall stand applicable to me and Frappe.`"
+					:label="`I agree that the laws of the region selected by me (${selectedClusterTitle}) shall stand applicable to me and Easytouch.`"
 				/>
 				<FormControl
 					class="checkbox"
@@ -357,7 +357,7 @@ export default {
 							team: this.$team.doc.name,
 							subdomain: this.subdomain,
 							apps: [
-								{ app: 'frappe' },
+								// { app: 'frappe' },
 								...this.apps
 									.filter(app => app.app)
 									.map(app => ({ app: app.app }))
