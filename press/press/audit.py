@@ -1,4 +1,4 @@
-"""Functions for automated audit of frappe cloud systems."""
+"""Functions for automated audit of Easytouch Cloud systems."""
 
 import json
 from typing import Dict, List

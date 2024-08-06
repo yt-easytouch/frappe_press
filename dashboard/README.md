@@ -1,6 +1,6 @@
 # Dashboard
 
-Dashboard is a VueJS application that is the face of Frappe Cloud. This is what the end users (tenants) see and manage their FC stuff in. The tenants does not have access to the desk, so, this is their dashboard for managing sites, apps, updates etc.
+Dashboard is a VueJS application that is the face of Easytouch Cloud. This is what the end users (tenants) see and manage their FC stuff in. The tenants does not have access to the desk, so, this is their dashboard for managing sites, apps, updates etc.
 
 Technologies at the heart of dashboard:
 

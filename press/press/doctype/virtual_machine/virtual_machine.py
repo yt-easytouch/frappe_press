@@ -164,7 +164,7 @@ class VirtualMachine(Document):
 			"TagSpecifications": [
 				{
 					"ResourceType": "instance",
-					"Tags": [{"Key": "Name", "Value": f"Frappe Cloud - {self.name}"}],
+					"Tags": [{"Key": "Name", "Value": f"Easytouch Cloud - {self.name}"}],
 				},
 			],
 			"UserData": self.get_cloud_init() if self.virtual_machine_image else "",
@@ -583,12 +583,12 @@ class VirtualMachine(Document):
 	def _create_snapshots_aws(self):
 		response = self.client().create_snapshots(
 			InstanceSpecification={"InstanceId": self.instance_id},
-			Description=f"Frappe Cloud - {self.name} - {frappe.utils.now()}",
+			Description=f"Easytouch Cloud - {self.name} - {frappe.utils.now()}",
 			TagSpecifications=[
 				{
 					"ResourceType": "snapshot",
 					"Tags": [
-						{"Key": "Name", "Value": f"Frappe Cloud - {self.name} - {frappe.utils.now()}"}
+						{"Key": "Name", "Value": f"Easytouch Cloud - {self.name} - {frappe.utils.now()}"}
 					],
 				},
 			],
@@ -616,7 +616,7 @@ class VirtualMachine(Document):
 						CreateBootVolumeBackupDetails(
 							boot_volume_id=volume.volume_id,
 							type="INCREMENTAL",
-							display_name=f"Frappe Cloud - {self.name} - {volume.name} - {frappe.utils.now()}",
+							display_name=f"Easytouch Cloud - {self.name} - {volume.name} - {frappe.utils.now()}",
 						)
 					)
 					.data
@@ -626,7 +626,7 @@ class VirtualMachine(Document):
 					CreateVolumeBackupDetails(
 						volume_id=volume.volume_id,
 						type="INCREMENTAL",
-						display_name=f"Frappe Cloud - {self.name} - {volume.name} - {frappe.utils.now()}",
+						display_name=f"Easytouch Cloud - {self.name} - {volume.name} - {frappe.utils.now()}",
 					)
 				).data
 			try:

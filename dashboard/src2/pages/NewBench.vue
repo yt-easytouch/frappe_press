@@ -40,7 +40,7 @@
 			<div>
 				<div class="flex items-center justify-between">
 					<h2 class="text-sm font-medium leading-6 text-gray-900">
-						Select Frappe Framework Version
+						Select Framework Version
 					</h2>
 				</div>
 				<div class="mt-2">
