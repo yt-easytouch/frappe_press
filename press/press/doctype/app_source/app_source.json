@@ -9,7 +9,7 @@
   "app",
   "app_title",
   "frappe",
-  "auto_install",
+  "auto_add_list",
   "enabled",
   "repository_url",
   "data_3",
@@ -167,9 +167,9 @@
    "default": "0",
    "fetch_from": "app.frappe",
    "fetch_if_empty": 1,
-   "fieldname": "auto_install",
+   "fieldname": "auto_add_list",
    "fieldtype": "Check",
-   "label": "Auto Install"
+   "label": "Auto Add List"
   }
  ],
  "index_web_pages_for_search": 1,
@@ -179,7 +179,7 @@
    "link_fieldname": "reference_name"
   }
  ],
- "modified": "2024-08-04 17:10:33.541969",
+ "modified": "2024-08-05 22:04:17.165508",
  "modified_by": "Administrator",
  "module": "Press",
  "name": "App Source",

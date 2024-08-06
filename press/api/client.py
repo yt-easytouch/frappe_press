@@ -220,11 +220,10 @@ def insert(doc=None):
  
 	for app in app_release:
 		source = frappe.get_doc("App Source", app.source)
-		if source.auto_install or source.frappe:  # Check if frappe is enabled
+		if app.auto_install or source.frappe:  # Check if frappe is enabled
 			new_apps.append({"app": app.app})
 
 	doc.apps= new_apps + existing_apps
-    
 
 	if frappe.is_table(doc.doctype):
 		if not (doc.parenttype and doc.parent and doc.parentfield):

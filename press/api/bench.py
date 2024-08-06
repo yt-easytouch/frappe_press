@@ -210,7 +210,7 @@ def options(only_by_current_team=False):
 		version.status as status,
 		version.default,
 		source.name as source, source.app, source.repository_url, source.repository, source.repository_owner, source.branch,
-		source.app_title as title, source.frappe
+		source.app_title as title, source.frappe , source.auto_add_list
 	FROM
 		`tabApp Source Version` AS source_version
 	LEFT JOIN
@@ -250,6 +250,8 @@ def options(only_by_current_team=False):
 					"branch": source.branch,
 					"repository": source.repository,
 					"repository_owner": source.repository_owner,
+					"auto_add_list": source.auto_add_list,
+					"main_app": source.frappe,
 				}
 				app_dict.setdefault("sources", []).append(source_dict)
 			app_dict["source"] = app_dict["sources"][0]

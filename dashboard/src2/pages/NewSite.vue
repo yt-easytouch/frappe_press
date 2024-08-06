@@ -551,7 +551,7 @@ export default {
 
 			return [
 				{
-					label: 'Frappe Framework Version',
+					label: 'Framework Version',
 					value: this.selectedVersion?.name
 				},
 				{

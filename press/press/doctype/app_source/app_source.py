@@ -27,7 +27,7 @@ class AppSource(Document):
 
 		app: DF.Link
 		app_title: DF.Data
-		auto_install: DF.Check
+		auto_add_list: DF.Check
 		branch: DF.Data
 		enabled: DF.Check
 		frappe: DF.Check
