@@ -451,7 +451,7 @@ class Site(Document, TagHelpers):
 			"Pending",
 			"Archived",
 			"Suspended",
-		] and self.has_value_changed("subdomain"):
+		] and (self.has_value_changed("subdomain") or self.has_value_changed("domain")):
 			self.rename(self._get_site_name(self.subdomain))
 
 		# Telemetry: Send event if first site status changed to Active
@@ -1876,12 +1876,12 @@ class Site(Document, TagHelpers):
 			user = frappe.db.get_value(
 				"User", {"email": user_email}, ["first_name", "last_name"], as_dict=True
 			)
-			user_first_name = user.first_name or ""
-			user_last_name = user.last_name or ""
+			user_first_name = user.first_name
+			user_last_name = user.last_name
 		return {
 			"email": user_email,
-			"first_name": user_first_name,
-			"last_name": user_last_name,
+			"first_name": user_first_name or "",
+			"last_name": user_last_name or "",
 		}
 
 	def setup_erpnext(self):
