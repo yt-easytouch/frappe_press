@@ -18,11 +18,11 @@ dayjs.extend(timezone);
 export function dayjsLocal(dateTimeString) {
 	let localTimezone = dayjs.tz.guess();
 	// dates are stored in Asia/Calcutta timezone on the server
-	return dayjs.tz(dateTimeString, 'Asia/Calcutta').tz(localTimezone);
+	return dayjs.tz(dateTimeString, 'Africa/Mogadishu').tz(localTimezone);
 }
 
 export function dayjsIST(dateTimeString) {
-	return dayjs(dateTimeString).tz('Asia/Calcutta');
+	return dayjs(dateTimeString).tz('Africa/Mogadishu');
 }
 
 export default dayjs;

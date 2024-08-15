@@ -40,7 +40,7 @@
 			<div>
 				<div class="flex items-center justify-between">
 					<h2 class="text-sm font-medium leading-6 text-gray-900">
-						Select Frappe Framework Version
+						Select Framework Version
 					</h2>
 				</div>
 				<div class="mt-2">
@@ -116,7 +116,7 @@
 				<FormControl
 					type="checkbox"
 					v-model="agreedToRegionConsent"
-					:label="`I agree that the laws of the region selected by me shall stand applicable to me and Frappe.`"
+					:label="`I agree that the laws of the region selected by me shall stand applicable to me and Easytouch.`"
 				/>
 				<ErrorMessage class="my-2" :message="$resources.createBench.error" />
 				<Button
@@ -129,17 +129,27 @@
 								version: benchVersion,
 								cluster: benchRegion,
 								saas_app: null,
-								apps: [
-									// some wizardry to only pick frappe for the chosen version
-									options.versions
-										.find(v => v.name === benchVersion)
-										.apps.find(app => app.name === 'frappe')
-								].map(app => {
-									return {
+								// apps: [
+								// 	// some wizardry to only pick frappe for the chosen version
+								// 	options.versions
+								// 		.find(v => v.name === benchVersion)
+								// 		.apps.find(app => app.name === 'frappe')
+								// ].map(app => {
+								// 	return {
+								// 		name: app.name,
+								// 		source: app.source.name
+								// 	};
+								// }),
+								apps: options.versions
+									.find(v => v.name === benchVersion)
+									.apps.filter(app => app.source.auto_add_list === 1 || app.source.main_app === 1)
+									.sort((a, b) => a.name === 'frappe' ? -1 : (b.name === 'frappe' ? 1 : 0))
+									.map(app => {
+										return {
 										name: app.name,
 										source: app.source.name
-									};
-								}),
+										};
+									}),
 								server: server || null
 							}
 						})
@@ -215,7 +225,7 @@ export default {
 		summaryOptions() {
 			return [
 				{
-					label: 'Frappe Framework Version',
+					label: 'Framework Version',
 					value: this.benchVersion
 				},
 				{

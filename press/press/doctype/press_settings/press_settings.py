@@ -179,9 +179,9 @@ class PressSettings(Document):
 	@frappe.whitelist()
 	def get_github_app_manifest(self):
 		if frappe.conf.developer_mode:
-			app_name = f"Frappe Cloud {frappe.generate_hash(length=6).upper()}"
+			app_name = f"Easytouch Cloud {frappe.generate_hash(length=6).upper()}"
 		else:
-			app_name = "Frappe Cloud"
+			app_name = "Easytouch Cloud"
 		manifest = {
 			"name": app_name,
 			"url": "https://frappe.cloud",
