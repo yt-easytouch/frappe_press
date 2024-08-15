@@ -165,8 +165,6 @@
   },
   {
    "default": "0",
-   "fetch_from": "app.frappe",
-   "fetch_if_empty": 1,
    "fieldname": "auto_add_list",
    "fieldtype": "Check",
    "label": "Auto Add List"
@@ -179,7 +177,7 @@
    "link_fieldname": "reference_name"
   }
  ],
- "modified": "2024-08-05 22:04:17.165508",
+ "modified": "2024-08-06 19:55:20.394329",
  "modified_by": "Administrator",
  "module": "Press",
  "name": "App Source",
