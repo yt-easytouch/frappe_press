@@ -8,9 +8,11 @@ import re
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Union
 from typing import Optional, TypedDict, TypeVar
 from urllib.parse import urljoin
 
+from babel.dates import format_timedelta
 import frappe
 import pytz
 import requests
@@ -89,7 +91,7 @@ def log_error(title, **kwargs):
 
 def get_current_team(get_doc=False):
 	if frappe.session.user == "Guest":
-		frappe.throw("Not Permitted", frappe.PermissionError)
+		frappe.throw("Not Permitted", frappe.AuthenticationError)
 
 	if not hasattr(frappe.local, "request"):
 		# if this is not a request, send the current user as default team
@@ -135,14 +137,15 @@ def get_current_team(get_doc=False):
 	if not system_user and not is_user_part_of_team(frappe.session.user, team):
 		# if user is not part of the team, get the default team for user
 		team = get_default_team_for_user(frappe.session.user)
-		if not team:
-			frappe.throw(
-				"User {0} does not belong to Team {1}".format(frappe.session.user, team),
-				frappe.PermissionError,
-			)
+
+	if not team:
+		frappe.throw(
+			f"User {frappe.session.user} is not part of any team",
+			frappe.AuthenticationError,
+		)
 
 	if not frappe.db.exists("Team", {"name": team, "enabled": 1}):
-		frappe.throw("Invalid Team", frappe.PermissionError)
+		frappe.throw("Invalid Team", frappe.AuthenticationError)
 
 	if get_doc:
 		return frappe.get_doc("Team", team)
@@ -314,7 +317,6 @@ def get_minified_script_2():
 
 def get_frappe_backups(url, email, password):
 	return RemoteFrappeSite(url, email, password).get_backups()
-
 
 
 def is_allowed_access_performance_tuning():
@@ -787,6 +789,11 @@ def _get_filepath(root: Path, filename: str, max_depth: int) -> Path | None:
 			max_depth - 1,
 		):
 			return possible_path
+
+
+def fmt_timedelta(td: Union[timedelta, int]):
+	locale = frappe.local.lang.replace("-", "_") if frappe.local.lang else None
+	return format_timedelta(td, locale=locale)
 
 
 V = TypeVar("V")

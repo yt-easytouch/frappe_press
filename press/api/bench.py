@@ -470,6 +470,9 @@ def all_apps(name):
 		fields=["name", "title", "image", "app"],
 	)
 
+	if not marketplace_apps:
+		return []
+
 	AppSource = frappe.qb.DocType("App Source")
 	AppSourceVersion = frappe.qb.DocType("App Source Version")
 	marketplace_app_sources = (
@@ -523,10 +526,10 @@ def add_app(name, source, app):
 @frappe.whitelist()
 @protected("Release Group")
 def add_apps(name, apps):
-	release_group = frappe.get_doc("Release Group", name)
+	release_group: "ReleaseGroup" = frappe.get_doc("Release Group", name)
 	for app in apps:
 		app_name, source = app.values()
-		release_group.append_source(frappe._dict(name=source, app=app_name))
+		release_group.update_source(frappe._dict(name=source, app=app_name))
 
 
 @frappe.whitelist()
