@@ -90,17 +90,25 @@ class AccountRequest(Document):
 			self.is_us_eu = False
 
 	def after_insert(self):
-		if not self.is_saas_signup():
+		# Telemetry: Only capture if it's not a saas signup or invited by parent team. Also don't capture if user already have a team
+		if not (
+			frappe.db.exists("Team", {"user": self.email})
+			or self.is_saas_signup()
+			or self.invited_by_parent_team
+		):
 			# Telemetry: Account Request Created
 			capture("account_request_created", "fc_signup", self.email)
+
+		if self.is_saas_signup():
+			# If user used oauth, we don't need to verification email but to track the event in stat, send this dummy event
+			capture("verification_email_sent", "fc_signup", self.email)
+			capture("clicked_verify_link", "fc_signup", self.email)
+
 		if self.send_email:
 			self.send_verification_email()
-		else:
-			if not self.is_saas_signup():
-				# Telemetry: Verification Mail Sent
-				# If user used oauth, we don't send verification email but to track the event in stat, send this event
-				capture("verification_email_sent", "fc_signup", self.email)
-				capture("clicked_verify_link", "fc_signup", self.email)
+		if self.oauth_signup:
+			# Telemetry: simulate verification email sent
+			capture("verification_email_sent", "fc_signup", self.email)
 
 	def get_country_info(self):
 		return get_country_info()
@@ -139,8 +147,9 @@ class AccountRequest(Document):
 		custom_template = self.saas_app and frappe.db.get_value(
 			"Marketplace App", self.saas_app, "custom_verify_template"
 		)
-		if self.product_trial or custom_template:
+		if self.is_saas_signup() or custom_template:
 			subject = "Verify your email for Easytouch"
+
 			template = "saas_verify_account"
 		else:
 			template = "verify_account"
@@ -160,7 +169,9 @@ class AccountRequest(Document):
 				"otp": self.otp,
 			}
 		)
-		if not self.is_saas_signup():
+		# Telemetry: Verification Email Sent
+		# Only capture if it's not a saas signup or invited by parent team
+		if not (self.is_saas_signup() or self.invited_by_parent_team):
 			# Telemetry: Verification Mail Sent
 			capture("verification_email_sent", "fc_signup", self.email)
 		frappe.sendmail(
@@ -189,7 +200,4 @@ class AccountRequest(Document):
 		)
 
 	def is_saas_signup(self):
-		# check whether it's a saas or erpnext signup
-		if self.erpnext or self.saas:
-			return True
-		return False
+		return bool(self.saas_app or self.product_trial or self.saas or self.erpnext)

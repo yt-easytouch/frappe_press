@@ -12,7 +12,7 @@ import ObjectList from '../components/ObjectList.vue';
 import { getTeam, switchToTeam } from '../data/team';
 import router from '../router';
 import { confirmDialog, icon, renderDialog } from '../utils/components';
-import { bytes, date, userCurrency } from '../utils/format';
+import { bytes, date, planTitle, userCurrency } from '../utils/format';
 import { getRunningJobs } from '../utils/agentJob';
 import SiteActions from '../components/SiteActions.vue';
 import { tagTab } from './common/tags';
@@ -288,14 +288,23 @@ export default {
 								}
 
 								return h(
-									Tooltip,
+									'div',
 									{
-										text: 'App has been patched',
-										placement: 'top',
+										title: 'App has been patched',
 										class: 'rounded-full bg-gray-100 p-1'
 									},
-									() => h(icon('alert-circle', 'w-3 h-3'))
+									h(icon('alert-circle', 'w-3 h-3'))
 								);
+							}
+						},
+						{
+							label: 'Plan',
+							width: 0.75,
+							class: 'text-gray-600 text-sm',
+							format(_, row) {
+								const planText = planTitle(row.plan_info);
+								if (planText) return `${planText}/mo`;
+								else return 'Free';
 							}
 						},
 						{
@@ -325,6 +334,12 @@ export default {
 							width: '34rem'
 						}
 					],
+					banner({ documentResource: site }) {
+						const bannerTitle =
+							'Your site is currently on a shared bench. Upgrade plan to install custom apps, enable server scripts and <a href="https://frappecloud.com/shared-hosting#benches" class="underline" target="_blank">more</a>.';
+
+						return upsellBanner(site, bannerTitle);
+					},
 					primaryAction({ listResource: apps, documentResource: site }) {
 						return {
 							label: 'Install App',
@@ -353,7 +368,7 @@ export default {
 						return [
 							{
 								label: 'View in Desk',
-								condition: () => $team.doc.is_desk_user,
+								condition: () => $team.doc?.is_desk_user,
 								onClick() {
 									window.open(`/app/app-source/${row.name}`, '_blank');
 								}
@@ -544,7 +559,7 @@ export default {
 							},
 							{
 								label: 'Set Primary',
-								condition: () => !row.primary,
+								condition: () => !row.primary && row.status === 'Active',
 								onClick() {
 									confirmDialog({
 										title: `Set Primary Domain`,
@@ -574,7 +589,10 @@ export default {
 							},
 							{
 								label: 'Redirect to Primary',
-								condition: () => !row.primary && !row.redirect_to_primary,
+								condition: () =>
+									!row.primary &&
+									!row.redirect_to_primary &&
+									row.status === 'Active',
 								onClick() {
 									confirmDialog({
 										title: `Redirect Domain`,
@@ -604,7 +622,10 @@ export default {
 							},
 							{
 								label: 'Remove Redirect',
-								condition: () => !row.primary && row.redirect_to_primary,
+								condition: () =>
+									!row.primary &&
+									row.redirect_to_primary &&
+									row.status === 'Active',
 								onClick() {
 									confirmDialog({
 										title: `Remove Redirect`,
@@ -941,6 +962,12 @@ export default {
 								});
 							}
 						};
+					},
+					banner({ documentResource: site }) {
+						const bannerTitle =
+							'Your site is currently on a shared bench. Upgrade plan for offsite backups and <a href="https://frappecloud.com/shared-hosting#benches" class="underline" target="_blank">more</a>.';
+
+						return upsellBanner(site, bannerTitle);
 					}
 				}
 			},
@@ -1289,6 +1316,12 @@ export default {
 								}
 							}
 						];
+					},
+					banner({ documentResource: site }) {
+						const bannerTitle =
+							'Your site is currently on a shared bench. Upgrade to a private bench to configure auto updates and <a href="https://frappecloud.com/shared-hosting#benches" class="underline" target="_blank">more</a>.';
+
+						return upsellBanner(site, bannerTitle);
 					}
 				}
 			},
@@ -1462,7 +1495,7 @@ export default {
 						)
 					},
 					condition: () =>
-						$team.doc.is_desk_user && site.doc.team != $team.name,
+						$team.doc?.is_desk_user && site.doc.team !== $team.name,
 					onClick() {
 						switchToTeam(site.doc.team);
 					}
@@ -1484,7 +1517,7 @@ export default {
 						{
 							label: 'View in Desk',
 							icon: 'external-link',
-							condition: () => $team.doc.is_desk_user,
+							condition: () => $team.doc?.is_desk_user,
 							onClick: () => {
 								window.open(
 									`${window.location.protocol}//${window.location.host}/app/site/${site.name}`,
@@ -1543,3 +1576,23 @@ export default {
 		}
 	]
 };
+
+function upsellBanner(site, title) {
+	if (!site.doc.current_plan?.private_benches && site.doc.group_public) {
+		return {
+			title: title,
+			dismissable: true,
+			id: site.name,
+			button: {
+				label: 'Upgrade Plan',
+				variant: 'outline',
+				onClick() {
+					let SitePlansDialog = defineAsyncComponent(() =>
+						import('../components/ManageSitePlansDialog.vue')
+					);
+					renderDialog(h(SitePlansDialog, { site: site.name }));
+				}
+			}
+		};
+	}
+}

@@ -6,6 +6,7 @@ from base64 import b64decode
 from typing import Dict, List
 
 import frappe
+from frappe.types.DF import Data
 import requests
 from frappe.query_builder.functions import Cast_
 from frappe.utils.caching import redis_cache
@@ -47,6 +48,7 @@ class MarketplaceApp(WebsiteGenerator):
 		after_install_script: DF.Code | None
 		after_uninstall_script: DF.Code | None
 		app: DF.Link
+		average_rating: DF.Float
 		categories: DF.Table[MarketplaceAppCategories]
 		custom_verify_template: DF.Check
 		description: DF.SmallText
@@ -640,7 +642,7 @@ def get_plans_for_app(
 	return plans
 
 
-def marketplace_app_hook(app=None, site="", op="install"):
+def marketplace_app_hook(app=None, site: Data | None = "", op="install"):
 	if app is None:
 		site_apps = frappe.get_all("Site App", filters={"parent": site}, pluck="app")
 		for app in site_apps:

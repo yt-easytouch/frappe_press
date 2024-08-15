@@ -250,7 +250,7 @@ export default {
 						return [
 							{
 								label: 'View in Desk',
-								condition: () => team.doc.is_desk_user,
+								condition: () => team.doc?.is_desk_user,
 								onClick() {
 									window.open(
 										`${window.location.protocol}//${window.location.host}/app/app/${row.name}`,
@@ -359,26 +359,35 @@ export default {
 							onClick() {
 								renderDialog(
 									h(AddAppDialog, {
-										groupName: releaseGroup.name,
-										groupVersion: releaseGroup.doc.version,
+										group: releaseGroup.doc,
 										onAppAdd() {
 											apps.reload();
 											releaseGroup.reload();
 										},
-										onNewApp(app) {
+										onNewApp(app, isUpdate) {
+											const loading = isUpdate
+												? 'Replacing App...'
+												: 'Adding App...';
+
 											toast.promise(
 												releaseGroup.addApp.submit({
-													app: app
+													app,
+													is_update: isUpdate
 												}),
 												{
-													loading: 'Adding App...',
+													loading,
 													success: () => {
 														apps.reload();
 														releaseGroup.reload();
-														return `App ${app.title} added to the bench`;
+
+														if (isUpdate) {
+															return `App ${app.title} updated`;
+														}
+
+														return `App ${app.title} added`;
 													},
 													error: e => {
-														return e.messages.length
+														return e?.messages.length
 															? e.messages.join('\n')
 															: e.message;
 													}
@@ -1000,12 +1009,12 @@ export default {
 				},
 				{
 					label: 'Options',
-					condition: () => team.doc.is_desk_user,
+					condition: () => team.doc?.is_desk_user,
 					options: [
 						{
 							label: 'View in Desk',
 							icon: icon('external-link'),
-							condition: () => team.doc.is_desk_user,
+							condition: () => team.doc?.is_desk_user,
 							onClick() {
 								window.open(
 									`${window.location.protocol}//${window.location.host}/app/release-group/${bench.name}`,

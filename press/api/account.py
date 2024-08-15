@@ -23,6 +23,7 @@ from press.press.doctype.team.team import (
 	get_child_team_members,
 	get_team_members,
 	has_unsettled_invoices,
+	has_active_servers,
 )
 from press.utils import get_country_info, get_current_team, is_user_part_of_team
 from press.utils.telemetry import capture
@@ -220,12 +221,20 @@ def login_using_key(key):
 
 
 @frappe.whitelist()
+def active_servers():
+	team = get_current_team()
+	return frappe.get_all("Server", {"team": team, "status": "Active"}, ["title", "name"])
+
+
+@frappe.whitelist()
 def disable_account():
 	team = get_current_team(get_doc=True)
 	if frappe.session.user != team.user:
 		frappe.throw("Only team owner can disable the account")
 	if has_unsettled_invoices(team.name):
 		return "Unpaid Invoices"
+	if has_active_servers(team.name):
+		return "Active Servers"
 
 	team.disable_account()
 
@@ -307,7 +316,8 @@ def validate_request_key(key, timezone=None):
 		product_trial_doc = (
 			frappe.get_doc("Product Trial", product_trial) if product_trial else None
 		)
-		capture("clicked_verify_link", "fc_signup", account_request.email)
+		if not (account_request.is_saas_signup() or account_request.invited_by_parent_team):
+			capture("clicked_verify_link", "fc_signup", account_request.email)
 		return {
 			"email": account_request.email,
 			"first_name": account_request.first_name,
