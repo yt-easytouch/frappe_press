@@ -207,12 +207,33 @@ def insert(doc=None):
 	check_permissions(doc.get("doctype"))
 
 	doc = frappe._dict(doc)
+ 
+	if doc.doctype=="Site":
+		# get main apps in Release Group App with App Source
+		app_release = frappe.get_all(
+				"Release Group App",
+				filters={"parent":  doc.group},
+				fields=["*"],
+				order_by="creation",
+			)
+	
+		existing_apps = doc.apps
+		new_apps = []
+	
+		for app in app_release:
+			source = frappe.get_doc("App Source", app.source)
+			if app.auto_install or source.frappe:  # Check if frappe is enabled
+				new_apps.append({"app": app.app})
+
+		doc.apps= new_apps + existing_apps
+ 
+
 	if frappe.is_table(doc.doctype):
 		if not (doc.parenttype and doc.parent and doc.parentfield):
 			frappe.throw(
 				frappe._("Parenttype, Parent and Parentfield are required to insert a child record")
 			)
-
+		
 		# inserting a child record
 		parent = frappe.get_doc(doc.parenttype, doc.parent)
 

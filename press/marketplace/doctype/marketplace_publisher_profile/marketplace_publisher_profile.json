@@ -66,11 +66,11 @@
    "label": "Payouts"
   },
   {
-   "default": "Frappe Cloud Credits",
+   "default": "Easytouch Cloud Credits",
    "fieldname": "preferred_payout_method",
    "fieldtype": "Select",
    "label": "Preferred Payout Method",
-   "options": "Frappe Cloud Credits\nBank Transfer\nPayPal"
+   "options": "Easytouch Cloud Credits\nBank Transfer\nPayPal"
   },
   {
    "depends_on": "eval:doc.preferred_payout_method==\"PayPal\"",
@@ -80,7 +80,7 @@
    "mandatory_depends_on": "eval:doc.preferred_payout_method==\"PayPal\""
   },
   {
-   "depends_on": "eval:doc.preferred_payout_method!=\"Frappe Cloud Credits\"",
+   "depends_on": "eval:doc.preferred_payout_method!=\"Easytouch Cloud Credits\"",
    "fieldname": "gstin",
    "fieldtype": "Data",
    "label": "GSTIN (If Applicable)"

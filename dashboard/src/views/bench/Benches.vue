@@ -174,7 +174,7 @@ export default {
 	},
 	pageMeta() {
 		return {
-			title: 'Benches - Frappe Cloud'
+			title: 'Benches - Easytouch Cloud'
 		};
 	},
 	components: {

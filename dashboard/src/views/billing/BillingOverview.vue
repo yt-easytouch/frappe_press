@@ -13,7 +13,7 @@ export default {
 	name: 'BillingOverview',
 	pageMeta() {
 		return {
-			title: 'Billing - Frappe Cloud'
+			title: 'Billing - Easytouch Cloud'
 		};
 	},
 	props: ['invoiceName'],

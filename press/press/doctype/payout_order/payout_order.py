@@ -36,6 +36,7 @@ class PayoutOrder(Document):
 		notes: DF.SmallText | None
 		period_end: DF.Date | None
 		period_start: DF.Date | None
+		recipient: DF.Data | None
 		recipient_currency: DF.Data | None
 		status: DF.Literal["Draft", "Paid", "Commissioned"]
 		team: DF.Link

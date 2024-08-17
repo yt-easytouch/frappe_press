@@ -75,8 +75,8 @@ class App(Document):
 			).insert()
 		return source
 
-	def before_save(self):
-		self.frappe = self.name == "frappe"
+	# def before_save(self):
+	# 	self.frappe = self.name == "frappe"
 
 
 def new_app(name, title):
