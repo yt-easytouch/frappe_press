@@ -17,6 +17,11 @@ def approve_partner_request(key):
 			partner_request_doc.approved_by_frappe = True
 
 		partner_request_doc.save(ignore_permissions=True)
+		partner_request_doc.reload()
+		frappe.db.commit()
+
+	frappe.response.type = "redirect"
+	frappe.response.location = f"/app/partner-approval-request/{partner_request_doc.name}"
 
 
 @frappe.whitelist()
@@ -134,18 +139,21 @@ def get_partner_contribution(partner_email):
 
 @frappe.whitelist()
 def add_partner(referral_code: str):
-	team = get_current_team(get_doc=True)
-	partner = frappe.get_doc("Team", {"partner_referral_code": referral_code}).name
-	doc = frappe.get_doc(
-		{
-			"doctype": "Partner Approval Request",
-			"partner": partner,
-			"requested_by": team.name,
-			"status": "Pending",
-			"send_mail": True,
-		}
-	)
-	doc.insert(ignore_permissions=True)
+	try:
+		team = get_current_team(get_doc=True)
+		partner = frappe.get_doc("Team", {"partner_referral_code": referral_code}).name
+		doc = frappe.get_doc(
+			{
+				"doctype": "Partner Approval Request",
+				"partner": partner,
+				"requested_by": team.name,
+				"status": "Pending",
+				"send_mail": True,
+			}
+		)
+		doc.insert(ignore_permissions=True)
+	except Exception:
+		frappe.throw("Error in adding partner")
 
 
 @frappe.whitelist()

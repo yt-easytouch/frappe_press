@@ -969,7 +969,7 @@ class DeployCandidate(Document):
 			["clone_directory", "cloned"],
 		)
 
-		if cloned:
+		if cloned and os.path.exists(source):
 			step.cached = True
 			step.status = "Success"
 		else:
@@ -1007,7 +1007,7 @@ class DeployCandidate(Document):
 			release,
 			for_update=True,
 		)
-		release._clone()
+		release._clone(force=True)
 
 		# End step
 		step.duration = get_duration(start_time)
