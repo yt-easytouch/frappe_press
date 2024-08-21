@@ -5,7 +5,7 @@
 				<div class="flex items-center">
 					<div class="shrink-0">
 						<router-link to="/">
-							<FrappeCloudLogo class="h-6" />
+							<EasytouchLogo class="h-6" />
 						</router-link>
 					</div>
 				</div>
@@ -89,11 +89,11 @@
 </template>
 
 <script>
-import FrappeCloudLogo from '@/components/icons/FrappeCloudLogo.vue';
+import EasytouchLogo from '@/components/icons/EasytouchLogo.vue';
 
 export default {
 	components: {
-		FrappeCloudLogo
+		EasytouchLogo
 	},
 	data() {
 		return {

@@ -7,10 +7,10 @@
 						class="flex w-[15rem] items-center rounded-md px-2 py-2 text-left"
 						:class="open ? 'bg-white shadow-sm' : 'hover:bg-gray-200'"
 					>
-						<FCLogo class="h-8 w-8 rounded" />
+						<ETLogo class="h-8 w-8 rounded" />
 						<div class="ml-2 flex flex-col">
 							<div class="text-base font-medium leading-none text-gray-900">
-								Frappe Cloud
+								Easytouch Cloud
 							</div>
 							<div
 								v-if="$account.user"
@@ -110,14 +110,14 @@
 <script>
 import { FCIcons } from '@/components/icons';
 import SwitchTeamDialog from './SwitchTeamDialog.vue';
-import FCLogo from '@/components/icons/FCLogo.vue';
+import ETLogo from '@/components/icons/ETLogo.vue';
 import CommandPalette from '@/components/CommandPalette.vue';
 import { unreadNotificationsCount } from '@/data/notifications';
 
 export default {
 	name: 'Sidebar',
 	components: {
-		FCLogo,
+		ETLogo,
 		SwitchTeamDialog,
 		CommandPalette
 	},

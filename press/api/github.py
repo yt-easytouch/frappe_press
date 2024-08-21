@@ -226,7 +226,7 @@ def app(owner, repository, branch, installation=None):
 	if not any(x in tree for x in py_setup_files):
 		setup_filenames = frappe.bold(" or ".join(py_setup_files))
 		reason = f"Files {setup_filenames} do not exist in app directory."
-		frappe.throw(f"Not a valid Frappe App! {reason}")
+		frappe.throw(f"Not a valid Easytouch App! {reason}")
 
 	app_name, title = _get_app_name_and_title_from_hooks(
 		owner,
@@ -310,7 +310,7 @@ def _get_app_name_and_title_from_hooks(
 		)
 		break
 
-	frappe.throw(f"Not a valid Frappe App! {reason_for_invalidation}")
+	frappe.throw(f"Not a valid Easytouch App! {reason_for_invalidation}")
 
 
 def _generate_files_tree(files):
