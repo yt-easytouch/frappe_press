@@ -3,6 +3,7 @@
 		v-if="referralLink"
 		title="Refer & Earn"
 		subtitle="Your unique referral link"
+		class="mx-auto max-w-3xl"
 	>
 		<div class="flex flex-col space-y-4 overflow-hidden">
 			<ClickToCopyField :textContent="referralLink" />

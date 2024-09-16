@@ -8,14 +8,45 @@
 				<template v-slot:default>
 					<div v-if="!(resetPasswordEmailSent || accountRequestCreated)">
 						<form class="flex flex-col" @submit.prevent="submitForm">
+							<!-- 2FA Section -->
+							<template v-if="is2FA">
+								<FormControl
+									label="2FA Code from your Authenticator App"
+									placeholder="123456"
+									v-model="twoFactorCode"
+									required
+								/>
+								<Button
+									class="mt-4"
+									:loading="
+										$resources.verify2FA.loading ||
+										$session.login.loading ||
+										$resources.resetPassword.loading
+									"
+									variant="solid"
+									@click="
+										$resources.verify2FA.submit({
+											user: email,
+											totp_code: twoFactorCode
+										})
+									"
+								>
+									Verify
+								</Button>
+								<ErrorMessage
+									class="mt-2"
+									:message="$resources.verify2FA.error"
+								/>
+							</template>
+
 							<!-- Forgot Password Section -->
-							<template v-if="hasForgotPassword">
+							<template v-else-if="hasForgotPassword">
 								<FormControl
 									label="Email"
 									type="email"
 									placeholder="johndoe@mail.com"
 									autocomplete="email"
-									:modelValue="email"
+									v-model="email"
 									required
 								/>
 								<router-link
@@ -74,7 +105,12 @@
 								<Button v-else class="mt-4" variant="solid">
 									Log in with {{ oauthProviderName }}
 								</Button>
-								<ErrorMessage class="mt-2" :message="$session.login.error" />
+								<ErrorMessage
+									class="mt-2"
+									:message="
+										$session.login.error || $resources.is2FAEnabled.error
+									"
+								/>
 							</template>
 
 							<!-- Signup Section -->
@@ -100,7 +136,7 @@
 						</form>
 						<div
 							class="flex flex-col"
-							v-if="!hasForgotPassword && !isOauthLogin"
+							v-if="!hasForgotPassword && !isOauthLogin && !is2FA"
 						>
 							<div class="-mb-2 mt-6 border-t text-center">
 								<div class="-translate-y-1/2 transform">
@@ -152,10 +188,10 @@
 								required
 							/>
 							<FormControl
-								label="OTP (Sent to your email)"
+								label="Verification code (Sent to your email)"
 								type="text"
 								class="mt-4"
-								placeholder="5 digit OTP"
+								placeholder="5 digit verification code"
 								maxlength="5"
 								v-model="otp"
 								required
@@ -170,7 +206,7 @@
 								:loading="$resources.verifyOTP.loading"
 								@click="$resources.verifyOTP.submit()"
 							>
-								Verify & Next
+								Verify
 							</Button>
 							<Button
 								class="mt-2"
@@ -243,12 +279,25 @@ export default {
 			account_request: '',
 			accountRequestCreated: false,
 			otp: '',
+			twoFactorCode: '',
 			password: null,
 			resetPasswordEmailSent: false
 		};
 	},
 	mounted() {
 		this.email = localStorage.getItem('login_email');
+		if (window.posthog?.__loaded) {
+			window.posthog.identify((this.email || window.posthog.get_distinct_id()), {
+				app: 'frappe_cloud',
+				action: 'login_signup'
+			});
+			window.posthog.startSessionRecording();
+		}
+	},
+	unmounted() {
+		if (window.posthog?.__loaded && window.posthog.sessionRecordingStarted()) {
+			window.posthog.stopSessionRecording();
+		}
 	},
 	watch: {
 		email() {
@@ -267,7 +316,8 @@ export default {
 				onSuccess(account_request) {
 					this.account_request = account_request;
 					this.accountRequestCreated = true;
-				}
+				},
+				onError: this.onSignupError.bind(this)
 			};
 		},
 		verifyOTP() {
@@ -319,9 +369,6 @@ export default {
 		resetPassword() {
 			return {
 				url: 'press.api.account.send_reset_password_email',
-				params: {
-					email: this.email
-				},
 				onSuccess() {
 					this.resetPasswordEmailSent = true;
 				}
@@ -334,6 +381,25 @@ export default {
 					product: this.$route.query.product
 				},
 				auto: true
+			};
+		},
+		is2FAEnabled() {
+			return {
+				url: 'press.api.account.is_2fa_enabled'
+			};
+		},
+		verify2FA() {
+			return {
+				url: 'press.api.account.verify_2fa',
+				onSuccess: async () => {
+					if (this.isLogin) {
+						await this.login();
+					} else if (this.hasForgotPassword) {
+						await this.$resources.resetPassword.submit({
+							email: this.email
+						});
+					}
+				}
 			};
 		}
 	},
@@ -356,25 +422,45 @@ export default {
 						provider: this.socialLoginKey
 					});
 				} else if (this.email && this.password) {
-					await this.$session.login.submit(
+					await this.$resources.is2FAEnabled.submit(
+						{ user: this.email },
 						{
-							email: this.email,
-							password: this.password
-						},
-						{
-							onSuccess: res => {
-								let loginRoute = `/dashboard${res.dashboard_route || '/'}`;
-								if (this.$route.query.product) {
-									loginRoute = `/dashboard/app-trial/setup/${this.$route.query.product}`;
+							onSuccess: async two_factor_enabled => {
+								if (two_factor_enabled) {
+									this.$router.push({
+										name: 'Login',
+										query: {
+											two_factor: 1
+										}
+									});
+								} else {
+									await this.login();
 								}
-								localStorage.setItem('login_email', this.email);
-								window.location.href = loginRoute;
 							}
 						}
 					);
 				}
 			} else if (this.hasForgotPassword) {
-				this.$resources.resetPassword.submit();
+				await this.$resources.is2FAEnabled.submit(
+					{ user: this.email },
+					{
+						onSuccess: async two_factor_enabled => {
+							if (two_factor_enabled) {
+								this.$router.push({
+									name: 'Login',
+									query: {
+										two_factor: 1,
+										forgot: 1
+									}
+								});
+							} else {
+								await this.$resources.resetPassword.submit({
+									email: this.email
+								});
+							}
+						}
+					}
+				);
 			} else {
 				this.$resources.signup.submit();
 			}
@@ -383,6 +469,51 @@ export default {
 			const params = location.search;
 			const searchParams = new URLSearchParams(params);
 			return searchParams.get('referrer');
+		},
+		async login() {
+			await this.$session.login.submit(
+				{
+					email: this.email,
+					password: this.password
+				},
+				{
+					onSuccess: res => {
+						let loginRoute = `/dashboard${res.dashboard_route || '/'}`;
+						if (this.$route.query.product) {
+							loginRoute = `/dashboard/app-trial/setup/${this.$route.query.product}`;
+						}
+						localStorage.setItem('login_email', this.email);
+						window.location.href = loginRoute;
+					},
+					onError: err => {
+						if (this.$route.name === 'Login' && this.$route.query.two_factor) {
+							this.$router.push({
+								name: 'Login',
+								query: {
+									two_factor: undefined
+								}
+							});
+							this.twoFactorCode = '';
+						}
+					}
+				}
+			);
+		},
+		onSignupError(error) {
+			if (error?.exc_type !== 'ValidationError') {
+				return;
+			}
+			let errorMessage = '';
+			if ((error?.messages ?? []).length) {
+				errorMessage = error?.messages?.[0];
+			}
+			// check if error message has `is already registered` substring
+			if (errorMessage.includes('is already registered')) {
+				localStorage.setItem('login_email', this.email);
+				this.$router.push({
+					name: 'Login'
+				});
+			}
 		}
 	},
 	computed: {
@@ -403,6 +534,9 @@ export default {
 		},
 		hasForgotPassword() {
 			return this.$route.name == 'Login' && this.$route.query.forgot;
+		},
+		is2FA() {
+			return this.$route.name == 'Login' && this.$route.query.two_factor;
 		},
 		emailDomain() {
 			return this.email?.includes('@') ? this.email?.split('@').pop() : '';

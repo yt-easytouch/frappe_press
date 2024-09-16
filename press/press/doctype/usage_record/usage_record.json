@@ -139,7 +139,8 @@
    "fieldname": "plan_type",
    "fieldtype": "Link",
    "label": "Plan Type",
-   "options": "DocType"
+   "options": "DocType",
+   "search_index": 1
   }
  ],
  "index_web_pages_for_search": 1,

@@ -7,6 +7,7 @@ import re
 from collections import defaultdict
 from datetime import datetime
 from functools import wraps
+from frappe.utils import add_to_date, now_datetime
 import pytz
 from typing import Any, Dict, List
 from contextlib import suppress
@@ -84,6 +85,12 @@ if TYPE_CHECKING:
 	from press.press.doctype.server.server import Server
 	from press.press.doctype.server.server import BaseServer
 
+DOCTYPE_SERVER_TYPE_MAP = {
+	"Server": "Application",
+	"Database Server": "Database",
+	"Proxy Server": "Proxy",
+}
+
 
 class Site(Document, TagHelpers):
 	# begin: auto-generated types
@@ -137,6 +144,8 @@ class Site(Document, TagHelpers):
 		saas_communication_secret: DF.Data | None
 		server: DF.Link
 		setup_wizard_complete: DF.Check
+		setup_wizard_status_check_next_retry_on: DF.Datetime | None
+		setup_wizard_status_check_retries: DF.Int
 		skip_auto_updates: DF.Check
 		skip_failing_patches: DF.Check
 		skip_scheduled_backups: DF.Check
@@ -166,6 +175,7 @@ class Site(Document, TagHelpers):
 		"notify_email",
 		"team",
 		"plan",
+		"setup_wizard_complete",
 		"archive_failed",
 		"cluster",
 		"bench",
@@ -226,6 +236,9 @@ class Site(Document, TagHelpers):
 		doc.current_usage = self.current_usage
 		doc.current_plan = get("Site Plan", self.plan) if self.plan else None
 		doc.last_updated = self.last_updated
+		doc.has_scheduled_updates = bool(
+			frappe.db.exists("Site Update", {"site": self.name, "status": "Scheduled"})
+		)
 		doc.update_information = self.get_update_information()
 		doc.actions = self.get_actions()
 		server = frappe.get_value(
@@ -296,6 +309,8 @@ class Site(Document, TagHelpers):
 		self._update_configuration(self.get_plan_config(), save=False)
 		if not self.notify_email and self.team != "Administrator":
 			self.notify_email = frappe.db.get_value("Team", self.team, "notify_email")
+		if not self.setup_wizard_status_check_next_retry_on:
+			self.setup_wizard_status_check_next_retry_on = now_datetime()
 
 	def validate_site_name(self):
 		site_regex = r"^[a-z0-9][a-z0-9-]*[a-z0-9]$"
@@ -546,7 +561,13 @@ class Site(Document, TagHelpers):
 		if self.standby_for_product or self.standby_for:
 			# if standby site, rename site and create first user for trial signups
 			create_user = self.get_user_details()
-			job = agent.rename_site(self, new_name, create_user)
+			# update the subscription config while renaming the standby site
+			self.update_config_preview()
+			site_config = json.loads(self.config)
+			subsription_config = site_config.get("subscription", {})
+			job = agent.rename_site(
+				self, new_name, create_user, config={"subscription": subsription_config}
+			)
 			self.flags.rename_site_agent_job_name = job.name
 		else:
 			agent.rename_site(self, new_name)
@@ -593,12 +614,11 @@ class Site(Document, TagHelpers):
 		self.config = json.dumps(new_config, indent=4)
 
 	def install_marketplace_conf(self, app: str, plan: str | None = None):
-		marketplace_app_hook(app=app, site=self.name, op="install")
-
 		if plan:
 			MarketplaceAppPlan.create_marketplace_app_subscription(
 				self.name, app, plan, self.team
 			)
+		marketplace_app_hook(app=app, site=self.name, op="install")
 
 	def uninstall_marketplace_conf(self, app: str):
 		marketplace_app_hook(app=app, site=self.name, op="uninstall")
@@ -745,7 +765,7 @@ class Site(Document, TagHelpers):
 
 	def check_and_increase_disk(self, server: "BaseServer", space_required: int):
 		if (diff := server.free_space - space_required) <= 0:
-			msg = f"Insufficient estimated space on Application server to create site. Required: {human_readable(self.space_required_on_app_server)}, Available: {human_readable(server.free_space)} (Need {human_readable(abs(diff))})."
+			msg = f"Insufficient estimated space on {DOCTYPE_SERVER_TYPE_MAP[server.doctype]} server to create site. Required: {human_readable(space_required)}, Available: {human_readable(server.free_space)} (Need {human_readable(abs(diff))})."
 			if server.public:
 				self.try_increasing_disk(server, diff, msg)
 			else:
@@ -952,7 +972,10 @@ class Site(Document, TagHelpers):
 	@dashboard_whitelist()
 	@site_action(["Active", "Inactive", "Suspended"])
 	def schedule_update(
-		self, skip_failing_patches=False, skip_backups=False, scheduled_time=None
+		self,
+		skip_failing_patches: bool = False,
+		skip_backups: bool = False,
+		scheduled_time: str = None,
 	):
 		log_site_activity(self.name, "Update")
 		doc = frappe.get_doc(
@@ -966,6 +989,29 @@ class Site(Document, TagHelpers):
 			}
 		).insert()
 		return doc.name
+
+	@dashboard_whitelist()
+	def edit_scheduled_update(
+		self,
+		name,
+		skip_failing_patches: bool = False,
+		skip_backups: bool = False,
+		scheduled_time: str = None,
+	):
+		doc = frappe.get_doc("Site Update", name)
+		doc.skipped_failing_patches = skip_failing_patches
+		doc.skipped_backups = skip_backups
+		doc.scheduled_time = scheduled_time
+		doc.save()
+		return doc.name
+
+	@dashboard_whitelist()
+	def cancel_scheduled_update(self, site_update: str):
+		if status := frappe.db.get_value("Site Update", site_update, "status") != "Scheduled":
+			frappe.throw(f"Cannot cancel a Site Update with status {status}")
+
+		# TODO: Set status to cancelled instead of deleting the doc
+		frappe.delete_doc("Site Update", site_update)
 
 	@frappe.whitelist()
 	def move_to_group(self, group, skip_failing_patches=False):
@@ -982,12 +1028,19 @@ class Site(Document, TagHelpers):
 
 	@frappe.whitelist()
 	def move_to_bench(self, bench, deactivate=True, skip_failing_patches=False):
+		frappe.only_for("System Manager")
 		self.ready_for_move()
+
+		if bench == self.bench:
+			frappe.throw("Site is already on the selected bench.")
+
 		log_site_activity(self.name, "Update")
 		agent = Agent(self.server)
-		agent.move_site_to_bench(self, bench, deactivate, skip_failing_patches)
+		return agent.move_site_to_bench(self, bench, deactivate, skip_failing_patches)
 
 	def reset_previous_status(self, fix_broken=False):
+		if self.status == "Archived":
+			return
 		self.status = self.status_before_update
 		self.status_before_update = None
 		if not self.status or (self.status == "Broken" and fix_broken):
@@ -1557,7 +1610,17 @@ class Site(Document, TagHelpers):
 
 	def fetch_setup_wizard_complete_status(self):
 		with suppress(Exception):
-			self.is_setup_wizard_complete()
+			# max retries = 18, backoff time = 10s, with exponential backoff it will try for 30 days
+			if self.setup_wizard_status_check_retries >= 18:
+				return
+			is_completed = self.is_setup_wizard_complete()
+			if not is_completed:
+				self.setup_wizard_status_check_retries += 1
+				exponential_backoff_duration = 10 * (2**self.setup_wizard_status_check_retries)
+				self.setup_wizard_status_check_next_retry_on = add_to_date(
+					now_datetime(), seconds=exponential_backoff_duration
+				)
+				self.save()
 
 	@frappe.whitelist()
 	def set_status_based_on_ping(self):
@@ -1575,7 +1638,7 @@ class Site(Document, TagHelpers):
 	def ping(self):
 		return requests.get(f"https://{self.name}/api/method/ping")
 
-	def _set_configuration(self, config):
+	def _set_configuration(self, config: list[dict]):
 		"""Similar to _update_configuration but will replace full configuration at once
 		This is necessary because when you update site config from the UI, you can update the key,
 		update the value, remove the key. All of this can be handled by setting the full configuration at once.
@@ -1611,7 +1674,7 @@ class Site(Document, TagHelpers):
 		Args:
 		config (dict): Python dict for any suitable frappe.conf
 		"""
-		keys = {x.key: i for i, x in enumerate(self.configuration)}
+		existing_keys = {x.key: i for i, x in enumerate(self.configuration)}
 		for key, value in config.items():
 			_type = frappe.get_value("Site Config Key", {"key": key}, "type") or guess_type(
 				value
@@ -1619,9 +1682,9 @@ class Site(Document, TagHelpers):
 			converted_value = convert(value)
 			if converted_value is None or cstr(converted_value).strip() == "":
 				continue
-			if key in keys:
-				self.configuration[keys[key]].value = converted_value
-				self.configuration[keys[key]].type = _type
+			if key in existing_keys:
+				self.configuration[existing_keys[key]].value = converted_value
+				self.configuration[existing_keys[key]].type = _type
 			else:
 				self.append(
 					"configuration",
@@ -1672,7 +1735,7 @@ class Site(Document, TagHelpers):
 
 	@dashboard_whitelist()
 	@site_action(["Active"])
-	def delete_config(self, key):
+	def delete_config(self, key, save=True):
 		"""Deletes a key from site configuration, meant for dashboard and API users"""
 		if key in get_client_blacklisted_keys():
 			return
@@ -1682,7 +1745,9 @@ class Site(Document, TagHelpers):
 			if row.key != key and not row.internal:
 				updated_config.append({"key": row.key, "value": row.value, "type": row.type})
 
-		self.update_site_config(updated_config)
+		self._set_configuration(updated_config)
+		if save:
+			return Agent(self.server).update_site_config(self)
 
 	@frappe.whitelist()
 	def update_site_config(self, config=None):
@@ -1778,8 +1843,6 @@ class Site(Document, TagHelpers):
 	@dashboard_whitelist()
 	def set_plan(self, plan):
 		from press.api.site import validate_plan
-
-		print("hello > ", plan)
 
 		validate_plan(self.server, plan)
 		self.change_plan(plan)
@@ -2091,24 +2154,33 @@ class Site(Document, TagHelpers):
 			}
 		).insert(ignore_permissions=True)
 
-	@dashboard_whitelist()
-	@site_action(["Active"])
-	def enable_database_access(self, mode="read_only"):
-		if frappe.db.get_all(
+	def check_db_access_enabling(self):
+		if frappe.db.get_value(
 			"Agent Job",
 			filters={
 				"site": self.name,
 				"job_type": "Add User to ProxySQL",
 				"status": ["in", ["Running", "Pending"]],
 			},
-			limit=1,
+			for_update=True,
 		):
 			frappe.throw(
 				"Database Access is already being enabled on this site. Please check after a while."
 			)
 
+	def check_db_access_enabled_already(self):
+		if frappe.db.get_value(
+			self.doctype, self.name, "is_database_access_enabled", for_update=True
+		):
+			frappe.throw("Database Access already enabled. Reload the page and try.")
+
+	@dashboard_whitelist()
+	@site_action(["Active"])
+	def enable_database_access(self, mode="read_only"):
 		if not frappe.db.get_value("Site Plan", self.plan, "database_access"):
 			frappe.throw(f"Database Access is not available on {self.plan} plan")
+		self.check_db_access_enabling()
+		self.check_db_access_enabled_already()
 		log_site_activity(self.name, "Enable Database Access")
 
 		server_agent = Agent(self.server)
@@ -2701,6 +2773,19 @@ def process_new_site_job_update(job):
 			job.site, updated_status == "Active"
 		)
 
+	# check if new bench related to a site group deploy
+	site_group_deploy = frappe.db.get_value(
+		"Site Group Deploy",
+		{
+			"site": job.site,
+			"status": "Creating Site",
+		},
+	)
+	if site_group_deploy:
+		frappe.get_doc(
+			"Site Group Deploy", site_group_deploy
+		).update_site_group_deploy_on_process_job(job)
+
 
 def update_product_trial_request_status_based_on_site_status(site, is_site_active):
 	records = frappe.get_list(
@@ -2717,6 +2802,7 @@ def update_product_trial_request_status_based_on_site_status(site, is_site_activ
 		)
 		if mode != "auto":
 			product_trial_request.status = "Site Created"
+			product_trial_request.site_creation_completed_on = now_datetime()
 			product_trial_request.save(ignore_permissions=True)
 		else:
 			product_trial_request.complete_setup_wizard()
@@ -2736,6 +2822,7 @@ def process_complete_setup_wizard_job_update(job):
 	)
 	if job.status == "Success":
 		product_trial_request.status = "Site Created"
+		product_trial_request.site_creation_completed_on = now_datetime()
 		product_trial_request.save(ignore_permissions=True)
 	elif job.status in ("Failure", "Delivery Failure"):
 		product_trial_request.status = "Error"
@@ -3213,14 +3300,34 @@ def options_for_new(group: str = None, selected_values=None) -> Dict:
 
 
 def sync_sites_setup_wizard_complete_status():
+	team_name = frappe.get_value("Team", {"user": "Administrator"}, "name")
 	sites = frappe.get_all(
 		"Site",
 		filters={
 			"status": "Active",
 			"setup_wizard_complete": 0,
-			"team": ("!=", "Administrator"),
+			"setup_wizard_status_check_retries": ("<", 18),
+			"setup_wizard_status_check_next_retry_on": ("<=", frappe.utils.now()),
+			"team": ("!=", team_name),
 		},
 		pluck="name",
+		order_by="RAND()",
+		limit=100,
 	)
 	for site in sites:
-		frappe.enqueue_doc("Site", site, method="fetch_setup_wizard_complete_status")
+		frappe.enqueue(
+			"press.press.doctype.site.site.fetch_setup_wizard_complete_status_if_site_exists",
+			site=site,
+			queue="sync",
+			job_id=f"fetch_setup_wizard_complete_status:{site}",
+			deduplicate=True,
+		)
+
+
+def fetch_setup_wizard_complete_status_if_site_exists(site):
+	if not frappe.db.exists("Site", site):
+		return
+	try:
+		frappe.get_doc("Site", site).fetch_setup_wizard_complete_status()
+	except frappe.DoesNotExistError:
+		pass

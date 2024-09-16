@@ -56,6 +56,7 @@ class Team(Document):
 		discounts: DF.Table[InvoiceDiscount]
 		enable_performance_tuning: DF.Check
 		enabled: DF.Check
+		enforce_2fa: DF.Check
 		erpnext_partner: DF.Check
 		frappe_partnership_date: DF.Date | None
 		free_account: DF.Check
@@ -93,6 +94,7 @@ class Team(Document):
 		"user",
 		"partner_email",
 		"erpnext_partner",
+		"enforce_2fa",
 		"billing_team",
 		"team_members",
 		"child_team_members",
@@ -125,6 +127,7 @@ class Team(Document):
 			["name", "first_name", "last_name", "user_image", "user_type", "email", "api_key"],
 			as_dict=True,
 		)
+		user.is_2fa_enabled = frappe.db.get_value("User 2FA", {"user": user.name}, "enabled")
 		doc.user_info = user
 		doc.balance = self.get_balance()
 		doc.is_desk_user = user.user_type == "System User"
@@ -147,6 +150,13 @@ class Team(Document):
 				"stripe_mandate_id",
 			],
 			as_dict=True,
+		)
+		doc.hide_sidebar = (
+			not self.parent_team
+			and not doc.onboarding.site_created
+			and len(doc.valid_teams) == 1
+			and not self.is_payment_mode_set()
+			and frappe.db.count("Marketplace App", {"team": self.name}) == 0
 		)
 
 	def onload(self):
@@ -207,7 +217,12 @@ class Team(Document):
 
 		has_unpaid_invoices = frappe.get_all(
 			"Invoice",
-			{"team": self.name, "status": ("in", ["Draft", "Unpaid"]), "type": "Subscription"},
+			{
+				"team": self.name,
+				"status": ("in", ["Draft", "Unpaid"]),
+				"type": "Subscription",
+				"total": (">", 0),
+			},
 		)
 
 		if self.payment_mode == "Paid By Partner" and has_unpaid_invoices:
@@ -367,7 +382,11 @@ class Team(Document):
 			self.user = self.team_members[0].user
 
 	def set_team_currency(self):
-		self.currency = "INR" if self.country == "India" else "USD"
+		if not self.currency and self.country:
+			self.currency = "INR" if self.country == "India" else "USD"
+
+		if self.is_new() and self.country == "India" and self.currency != "INR":
+			self.currency = "INR"
 
 	def get_user_list(self):
 		return [row.user for row in self.team_members]
@@ -889,8 +908,6 @@ class Team(Document):
 		why = ""
 		allow = (True, "")
 
-		return allow  # TODO must be removed
-
 		if not self.enabled:
 			why = "You cannot create a new site because your account is disabled"
 			return (False, why)
@@ -1026,6 +1043,7 @@ class Team(Document):
 				"is_saas_user": bool(self.via_erpnext or self.is_saas_user),
 				"saas_site_request": saas_site_request,
 				"complete": complete,
+				"is_payment_mode_set": is_payment_mode_set,
 			}
 		)
 
@@ -1076,7 +1094,7 @@ class Team(Document):
 		sites_to_suspend = self.get_sites_to_suspend()
 		for site in sites_to_suspend:
 			try:
-				frappe.get_doc("Site", site).suspend(reason)
+				frappe.get_doc("Site", site).suspend(reason, skip_reload=True)
 			except Exception:
 				log_error("Failed to Suspend Sites", traceback=frappe.get_traceback())
 		return sites_to_suspend
@@ -1101,13 +1119,33 @@ class Team(Document):
 			pluck="name",
 		)
 
+	def reallocate_workers_if_needed(
+		self, workloads_before: list[str, float, str], workloads_after: list[str, float, str]
+	):
+		for before, after in zip(workloads_before, workloads_after):
+			if after[1] - before[1] >= 8:  # 100 USD equivalent
+				frappe.enqueue_doc(
+					"Server",
+					before[2],
+					method="auto_scale_workers",
+					job_id=f"auto_scale_workers:{before[2]}",
+					deduplicate=True,
+					enqueue_after_commit=True,
+				)
+
 	@frappe.whitelist()
 	def unsuspend_sites(self, reason=None):
+		from press.press.doctype.bench.bench import Bench
+
 		suspended_sites = [
 			d.name for d in frappe.db.get_all("Site", {"team": self.name, "status": "Suspended"})
 		]
+		workloads_before = list(Bench.get_workloads(suspended_sites))
 		for site in suspended_sites:
 			frappe.get_doc("Site", site).unsuspend(reason)
+		workloads_after = list(Bench.get_workloads(suspended_sites))
+		self.reallocate_workers_if_needed(workloads_before, workloads_after)
+
 		return suspended_sites
 
 	def remove_subscription_config_in_trial_sites(self):
@@ -1125,7 +1163,7 @@ class Team(Document):
 			except Exception:
 				log_error("Failed to remove subscription config in trial sites")
 
-	def get_upcoming_invoice(self):
+	def get_upcoming_invoice(self, for_update=False):
 		# get the current period's invoice
 		today = frappe.utils.today()
 		result = frappe.db.get_all(
@@ -1142,7 +1180,7 @@ class Team(Document):
 			pluck="name",
 		)
 		if result:
-			return frappe.get_doc("Invoice", result[0])
+			return frappe.get_doc("Invoice", result[0], for_update=for_update)
 
 	def create_upcoming_invoice(self):
 		today = frappe.utils.today()

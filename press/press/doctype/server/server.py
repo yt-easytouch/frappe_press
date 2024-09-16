@@ -40,6 +40,8 @@ class BaseServer(Document, TagHelpers):
 		"team",
 		"database_server",
 		"is_self_hosted",
+		"auto_add_storage_min",
+		"auto_add_storage_max",
 	]
 
 	@staticmethod
@@ -102,11 +104,28 @@ class BaseServer(Document, TagHelpers):
 	def increase_disk_size_for_server(self, server: str, increment: int) -> None:
 		if server == self.name:
 			self.increase_disk_size(increment)
-			self.create_subscription_for_storage()
+			self.create_subscription_for_storage(increment)
 		else:
 			server_doc = frappe.get_doc("Database Server", server)
 			server_doc.increase_disk_size(increment)
-			server_doc.create_subscription_for_storage()
+			server_doc.create_subscription_for_storage(increment)
+
+	@dashboard_whitelist()
+	def configure_auto_add_storage(self, server: str, min: int, max: int) -> None:
+		if min < 0 or max < 0:
+			frappe.throw(_("Minimum and maximum storage sizes must be positive"))
+		if min > max:
+			frappe.throw(_("Minimum storage size must be less than the maximum storage size"))
+
+		if server == self.name:
+			self.auto_add_storage_min = min
+			self.auto_add_storage_max = max
+			self.save()
+		else:
+			server_doc = frappe.get_doc("Database Server", server)
+			server_doc.auto_add_storage_min = min
+			server_doc.auto_add_storage_max = max
+			server_doc.save()
 
 	@staticmethod
 	def on_not_found(name):
@@ -623,15 +642,9 @@ class BaseServer(Document, TagHelpers):
 		)
 		return frappe.get_doc("Subscription", name) if name else None
 
-	def create_subscription_for_storage(self):
+	def create_subscription_for_storage(self, increment: int) -> None:
 		plan_type = "Server Storage Plan"
 		plan = frappe.get_value(plan_type, {"enabled": 1}, "name")
-
-		server_disk_size = frappe.db.get_value(
-			"Virtual Machine", self.virtual_machine, "disk_size"
-		)
-		plan_disk_size = frappe.db.get_value("Server Plan", self.plan, "disk")
-		current_additional_storage = int(server_disk_size) - int(plan_disk_size)
 
 		if existing_subscription := frappe.db.get_value(
 			"Subscription",
@@ -649,7 +662,7 @@ class BaseServer(Document, TagHelpers):
 				"Subscription",
 				existing_subscription.name,
 				"additional_storage",
-				current_additional_storage + int(existing_subscription.additional_storage),
+				increment + int(existing_subscription.additional_storage),
 			)
 		else:
 			frappe.get_doc(
@@ -660,7 +673,7 @@ class BaseServer(Document, TagHelpers):
 					"team": self.team,
 					"plan_type": plan_type,
 					"plan": plan,
-					"additional_storage": current_additional_storage,
+					"additional_storage": increment,
 				}
 			).insert()
 
@@ -1688,6 +1701,10 @@ class Server(BaseServer):
 				)
 				if commit:
 					frappe.db.commit()
+			except frappe.TimestampMismatchError:
+				if commit:
+					frappe.db.rollback()
+				continue
 			except Exception:
 				log_error(
 					"Bench Auto Scale Worker Error", bench=bench, workload=self.bench_workloads[bench]
@@ -1784,6 +1801,7 @@ def scale_workers(now=False):
 					method="auto_scale_workers",
 					job_id=f"auto_scale_workers:{server.name}",
 					deduplicate=True,
+					queue="long",
 					enqueue_after_commit=True,
 				)
 			frappe.db.commit()
