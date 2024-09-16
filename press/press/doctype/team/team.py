@@ -675,7 +675,7 @@ class Team(Document):
 		self.save()
 		self.reload()
 
-		self.update_billing_details_on_stripe(address_doc)
+		# self.update_billing_details_on_stripe(address_doc)
 		self.update_billing_details_on_frappeio()
 		self.update_billing_details_on_draft_invoices()
 
@@ -1218,7 +1218,7 @@ class Team(Document):
 		payment_method = self.default_payment_method
 		last_4 = frappe.db.get_value("Stripe Payment Method", payment_method, "last_4")
 		account_update_link = frappe.utils.get_url("/dashboard")
-		subject = "Invoice Payment Failed for Frappe Cloud Subscription"
+		subject = "Invoice Payment Failed for Easytouch Cloud Subscription"
 
 		frappe.sendmail(
 			recipients=email,

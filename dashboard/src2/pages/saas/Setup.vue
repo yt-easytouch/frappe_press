@@ -236,8 +236,8 @@
 </template>
 <script>
 import { ErrorMessage, Progress, createResource, Badge } from 'frappe-ui';
-import FCLogo from '@/components/icons/FCLogo.vue';
-import FrappeLogo from '@/components/icons/FrappeLogo.vue';
+import FCLogo from '@/components/icons/ETLogo.vue';
+import FrappeLogo from '@/components/icons/YooltechLogo.vue';
 import { vElementSize } from '@vueuse/components';
 import SitePlansCards from '../../components/SitePlansCards.vue';
 import { trialDays, isTrialEnded } from '../../utils/site';

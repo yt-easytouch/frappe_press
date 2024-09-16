@@ -191,7 +191,7 @@ scheduler_events = {
 		"press.press.doctype.bench.bench.sync_analytics",
 		"press.saas.doctype.saas_app_subscription.saas_app_subscription.suspend_prepaid_subscriptions",
 		"press.press.doctype.payout_order.payout_order.create_marketplace_payout_orders",
-		"press.press.doctype.root_domain.root_domain.cleanup_cname_records",
+		# "press.press.doctype.root_domain.root_domain.cleanup_cname_records",
 		"press.press.doctype.remote_file.remote_file.poll_file_statuses",
 		"press.press.doctype.site_domain.site_domain.update_dns_type",
 	],
@@ -225,6 +225,10 @@ scheduler_events = {
 		"press.press.doctype.agent_job.agent_job.flush",
 	],
 	"cron": {
+     	"* * * * * 0/5": [
+			"press.press.doctype.agent_job.agent_job.poll_pending_jobs",
+			"press.press.doctype.telegram_message.telegram_message.send_telegram_message",
+		],
 		"1-59/2 * * * *": [
 			"press.press.doctype.incident.incident.validate_incidents",
 		],
@@ -237,10 +241,6 @@ scheduler_events = {
 		],
 		"0 3 * * *": [
 			"press.press.doctype.drip_email.drip_email.send_drip_emails",
-		],
-		"* * * * * 0/5": [
-			"press.press.doctype.agent_job.agent_job.poll_pending_jobs",
-			"press.press.doctype.telegram_message.telegram_message.send_telegram_message",
 		],
 		"0 */6 * * *": [
 			"press.press.doctype.server.server.cleanup_unused_files",

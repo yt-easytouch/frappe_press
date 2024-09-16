@@ -23,11 +23,11 @@ class AppSource(Document):
 
 	if TYPE_CHECKING:
 		from frappe.types import DF
-
 		from press.press.doctype.app_source_version.app_source_version import AppSourceVersion
 
 		app: DF.Link
 		app_title: DF.Data
+		auto_add_list: DF.Check
 		branch: DF.Data
 		enabled: DF.Check
 		frappe: DF.Check

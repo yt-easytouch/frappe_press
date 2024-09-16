@@ -98,7 +98,7 @@
    "fieldname": "subscription",
    "fieldtype": "Link",
    "label": "Subscription",
-   "options": "Subscription"
+   "options": "Subscription Account"
   },
   {
    "fieldname": "column_break_13",
@@ -146,7 +146,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2024-08-23 16:46:05.290651",
+ "modified": "2024-07-28 21:24:04.606286",
  "modified_by": "Administrator",
  "module": "Press",
  "name": "Usage Record",

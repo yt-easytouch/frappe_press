@@ -51,14 +51,14 @@ class VirtualMachineImage(Document):
 		if cluster.cloud_provider == "AWS EC2":
 			response = self.client.create_image(
 				InstanceId=self.instance_id,
-				Name=f"Frappe Cloud {self.name} - {self.virtual_machine}",
+				Name=f"Easytouch Cloud {self.name} - {self.virtual_machine}",
 			)
 			self.image_id = response["ImageId"]
 		elif cluster.cloud_provider == "OCI":
 			image = self.client.create_image(
 				CreateImageDetails(
 					compartment_id=cluster.oci_tenancy,
-					display_name=f"Frappe Cloud {self.name} - {self.virtual_machine}",
+					display_name=f"Easytouch Cloud {self.name} - {self.virtual_machine}",
 					instance_id=self.instance_id,
 				)
 			).data
@@ -68,7 +68,7 @@ class VirtualMachineImage(Document):
 	def create_image_from_copy(self):
 		source = frappe.get_doc("Virtual Machine Image", self.copied_from)
 		response = self.client.copy_image(
-			Name=f"Frappe Cloud {self.name} - {self.virtual_machine}",
+			Name=f"Easytouch Cloud {self.name} - {self.virtual_machine}",
 			SourceImageId=source.image_id,
 			SourceRegion=source.region,
 		)
