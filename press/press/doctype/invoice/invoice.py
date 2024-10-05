@@ -449,7 +449,7 @@ class Invoice(Document):
 		if self.stripe_invoice_id:
 			return
 		# if stripe invoice was created, find it and set it
-		# so that we avoid scenarios where Stripe Invoice was created but not set in Frappe Cloud
+		# so that we avoid scenarios where Stripe Invoice was created but not set in Easytouch Cloud
 		stripe = get_stripe()
 		invoices = stripe.Invoice.list(
 			customer=frappe.db.get_value("Team", self.team, "stripe_customer_id")
@@ -468,7 +468,7 @@ class Invoice(Document):
 		start = getdate(self.period_start)
 		end = getdate(self.period_end)
 		period_string = f"{start.strftime('%b %d')} - {end.strftime('%b %d')} {end.year}"
-		return f"Frappe Cloud Subscription ({period_string})"
+		return f"Easytouch Cloud Subscription ({period_string})"
 
 	@frappe.whitelist()
 	def finalize_stripe_invoice(self):

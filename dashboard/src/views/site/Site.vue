@@ -163,7 +163,7 @@ export default {
 	name: 'Site',
 	pageMeta() {
 		return {
-			title: `Site - ${this.siteName} - Frappe Cloud`
+			title: `Site - ${this.siteName} - Easytouch Cloud`
 		};
 	},
 	props: ['siteName'],

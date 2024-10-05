@@ -20,6 +20,7 @@ class ReleaseGroupApp(Document):
 		from frappe.types import DF
 
 		app: DF.Link
+		auto_install: DF.Check
 		enable_auto_deploy: DF.Check
 		parent: DF.Data
 		parentfield: DF.Data
