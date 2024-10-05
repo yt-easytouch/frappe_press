@@ -182,7 +182,7 @@ class PressSettings(Document):
 			app_name = f"Easytouch Cloud {frappe.generate_hash(length=6).upper()}"
 		else:
 			app_name = "Easytouch Cloud"
-		manifest = {
+		return  {
 			"name": app_name,
 			"url": "https://frappe.cloud",
 			"hook_attributes": {"url": get_url("api/method/press.api.github.hook")},
