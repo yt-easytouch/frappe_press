@@ -104,7 +104,7 @@ import dayjs from 'dayjs';
 import { toast } from 'vue-sonner';
 
 export default {
-	name: 'BenchDeploy',
+	name: 'DeployCandidate',
 	props: ['id', 'objectType'],
 	components: {
 		JobStep,
@@ -147,11 +147,11 @@ export default {
 			}
 		});
 		this.$socket.on(`bench_deploy:${this.id}:finished`, () => {
-			let rgDoc = getCachedDocumentResource(
+			const rgDoc = getCachedDocumentResource(
 				'Release Group',
 				this.$resources.deploy.doc?.group
 			);
-			rgDoc.reload();
+			if (rgDoc) rgDoc.reload();
 			this.$resources.deploy.reload();
 			this.$resources.errors.reload();
 		});
@@ -251,7 +251,7 @@ export default {
 					if (!name) {
 						onError();
 					} else {
-						router.push(`/benches/${group}/deploys/${name}`);
+						router.push(`/groups/${group}/deploys/${name}`);
 					}
 				},
 				onError

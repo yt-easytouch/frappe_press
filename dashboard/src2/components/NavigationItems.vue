@@ -25,7 +25,9 @@ export default {
 			const routeName = this.$route?.name || '';
 			const onboardingComplete = this.$team.doc.onboarding.complete;
 			const enforce2FA = Boolean(
-				this.$team.doc.enforce_2fa && !this.$team.doc.user_info?.is_2fa_enabled
+				!this.$team.doc.is_desk_user &&
+					this.$team.doc.enforce_2fa &&
+					!this.$team.doc.user_info?.is_2fa_enabled
 			);
 
 			return [
@@ -66,16 +68,16 @@ export default {
 					disabled: enforce2FA
 				},
 				{
-					name: 'Benches',
+					name: 'Bench Groups',
 					icon: () => h(Package),
-					route: '/benches',
+					route: '/groups',
 					isActive:
 						[
 							'Release Group List',
 							'Release Group Detail',
 							'New Release Group',
-							'Bench New Site',
-							'Bench Deploy'
+							'Release Group New Site',
+							'Deploy Candidate'
 						].includes(routeName) ||
 						routeName.startsWith('Release Group Detail'),
 					disabled: !onboardingComplete || enforce2FA
