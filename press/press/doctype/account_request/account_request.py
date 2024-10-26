@@ -142,7 +142,8 @@ class AccountRequest(Document):
 			print()
 			return
 
-		subject = f"{self.otp} - OTP for Frappe Cloud Account Verification"
+
+		subject = f"{self.otp} - OTP for Easytouch Cloud Account Verification"
 		args = {}
 		sender = ""
 
@@ -150,7 +151,8 @@ class AccountRequest(Document):
 			"Marketplace App", self.saas_app, "custom_verify_template"
 		)
 		if self.is_saas_signup() or custom_template:
-			subject = "Verify your email for Frappe"
+			subject = "Verify your email for Easytouch"
+
 			template = "saas_verify_account"
 			# If product trial(new saas flow), get the product trial details
 			if self.product_trial:
@@ -172,13 +174,14 @@ class AccountRequest(Document):
 			template = "verify_account"
 
 			if self.invited_by and self.role != "Press Admin":
-				subject = f"You are invited by {self.invited_by} to join Frappe Cloud"
+				subject = f"You are invited by {self.invited_by} to join Easytouch Cloud"
 				template = "invite_team_member"
-
+		logo = frappe.get_website_settings("app_logo") or frappe.get_hooks("app_logo_url")[-1]
 		args.update(
 			{
 				"invited_by": self.invited_by,
 				"link": url,
+				 "image_path": logo,
 				"read_pixel_path": get_url(
 					f"/api/method/press.utils.telemetry.capture_read_event?email={self.email}"
 				),
@@ -204,6 +207,7 @@ class AccountRequest(Document):
 			args=args,
 			now=True,
 		)
+		
 
 	def get_verification_url(self):
 		if self.saas:

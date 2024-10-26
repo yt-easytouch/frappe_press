@@ -8,10 +8,10 @@
 		<div class="flex flex-col space-y-4 overflow-hidden">
 			<ClickToCopyField :textContent="referralLink" />
 			<span class="text-base font-medium text-gray-700">
-				When someone signs up using the above link and spends at least
-				{{ minimumSpentAmount }} on Frappe Cloud, you
+				When someone sign's up using the above link and spends at least
+				{{ minimumSpentAmount }} on Easytouch Cloud, you
 				<strong>
-					get {{ creditAmountInTeamCurrency }} in Frappe Cloud Credits!
+					get {{ creditAmountInTeamCurrency }} in Easytouch Cloud Credits!
 				</strong>
 			</span>
 		</div>

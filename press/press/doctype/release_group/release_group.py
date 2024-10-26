@@ -1099,7 +1099,8 @@ class ReleaseGroup(Document, TagHelpers):
 		if is_update:
 			update_rg_app_source(self, source)
 		else:
-			self.append("apps", {"source": source.name, "app": source.app})
+			app_title = frappe.db.get_value("App Source", source.name, "app_title")
+			self.append("apps", {"title": app_title, "source": source.name, "app": source.app})
 		self.save()
 
 	def remove_app_if_invalid(self, source: "AppSource"):

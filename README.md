@@ -4,9 +4,9 @@
 [![unittests](https://github.com/frappe/press/actions/workflows/main.yaml/badge.svg)](https://github.com/frappe/press/actions/workflows/main.yaml)
 
 
-This is `press`, a Frappe custom app that runs [Frappe Cloud](https://frappecloud.com). This app manages infrastructure, subscription, marketplace, SaaS and much more.
+This is `press`, a Frappe custom app that runs [Easytouch Cloud](https://frappecloud.com). This app manages infrastructure, subscription, marketplace, SaaS and much more.
 
-The other half of the Frappe Cloud infrastructure is [agent](https://github.com/frappe/agent). Which is a flask application that runs on every server in a typical cluster and carries out tasks on HTTP requests. Creating a new site, installing an app, updating a site, creating a bench and everything in between is just a request (`Agent Job`) away.
+The other half of the Easytouch Cloud infrastructure is [agent](https://github.com/frappe/agent). Which is a flask application that runs on every server in a typical cluster and carries out tasks on HTTP requests. Creating a new site, installing an app, updating a site, creating a bench and everything in between is just a request (`Agent Job`) away.
 
 For updates, join our Telegram group: [@frappecloud](https://t.me/frappecloud)
 
@@ -42,7 +42,7 @@ You can find a detailed walkthough for setting up a local FC cluster [here](http
 
 ## The Front-end
 
-You can read more about the VueJS frontend for Frappe Cloud [here](./dashboard/README.md).
+You can read more about the VueJS frontend for Easytouch Cloud [here](./dashboard/README.md).
 
 ## Contributing
 
