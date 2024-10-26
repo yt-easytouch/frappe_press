@@ -29,8 +29,8 @@
   "team",
   "plan",
   "free",
-  "column_break_15",
   "staging",
+  "column_break_15",
   "account_request",
   "is_erpnext_setup",
   "trial_end_date",
@@ -697,8 +697,7 @@
    "link_fieldname": "site"
   }
  ],
-
- "modified": "2024-08-20 10:01:59.838341",
+ "modified": "2024-10-15 12:22:11.037182",
 
  "modified_by": "Administrator",
  "module": "Press",

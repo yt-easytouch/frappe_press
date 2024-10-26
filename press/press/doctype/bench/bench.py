@@ -76,6 +76,7 @@ class Bench(Document):
 		is_code_server_enabled: DF.Check
 		is_ssh_proxy_setup: DF.Check
 		last_archive_failure: DF.Datetime | None
+		last_inplace_update_failed: DF.Check
 		managed_database_service: DF.Link | None
 		memory_high: DF.Int
 		memory_max: DF.Int
@@ -96,9 +97,11 @@ class Bench(Document):
 
 	DOCTYPE = "Bench"
 	dashboard_fields = (
+		"apps",
 		"name",
 		"group",
 		"status",
+		"cluster",
 		"is_ssh_proxy_setup",
 		"inplace_update_docker_image",
 	)
@@ -106,15 +109,27 @@ class Bench(Document):
 	@staticmethod
 	def get_list_query(query):
 		Bench = frappe.qb.DocType("Bench")
+
+		Site = frappe.qb.DocType("Site")
+		site_count = (
+			frappe.qb.from_(Site)
+			.select(frappe.query_builder.functions.Count("*"))
+			.where(Site.bench == Bench.name)
+			.where(Site.status != "Archived")
+		)
+
 		benches = (
-			query.select(Bench.is_ssh_proxy_setup, Bench.inplace_update_docker_image)
+			query.select(
+				Bench.is_ssh_proxy_setup, Bench.inplace_update_docker_image, site_count.as_("site_count")
+			)
 			.where(Bench.status != "Archived")
 			.run(as_dict=1)
 		)
+		bench_names = [d.name for d in benches]
 		benches_with_patches = frappe.get_all(
 			"App Patch",
 			fields=["bench"],
-			filters={"bench": ["in", [d.name for d in benches]], "status": "Applied"},
+			filters={"bench": ["in", bench_names], "status": "Applied"},
 			pluck="bench",
 		)
 		for bench in benches:
@@ -128,6 +143,16 @@ class Bench(Document):
 		)
 		doc.user_ssh_key = bool(user_ssh_key)
 		doc.proxy_server = frappe.db.get_value("Server", self.server, "proxy_server")
+
+		group = frappe.db.get_value(
+			"Release Group",
+			self.group,
+			["title", "public", "team", "central_bench"],
+			as_dict=1,
+		)
+		doc.group_title = group.title
+		doc.group_team = group.team
+		doc.group_public = group.public or group.central_bench
 
 	@staticmethod
 	def with_sites(name: str):
@@ -720,7 +745,7 @@ class Bench(Document):
 			status="Broken",
 			site_status="Broken",
 		)
-
+		self.last_inplace_update_failed = True
 		self.recover_update_inplace(sites)
 
 	def recover_update_inplace(self, sites: list[str]):
@@ -779,6 +804,7 @@ class Bench(Document):
 			status="Active",
 			site_status="Active",
 		)
+		self.last_inplace_update_failed = False
 
 	def set_self_and_site_status(
 		self,

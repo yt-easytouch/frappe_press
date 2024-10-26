@@ -31,6 +31,7 @@ from frappe.utils import (
 	sbool,
 	time_diff_in_hours,
 )
+from frappe.utils.caching import redis_cache
 
 from press.exceptions import (
 	CannotChangePlan,
@@ -156,7 +157,10 @@ class Site(Document, TagHelpers):
 		staging: DF.Check
 		standby_for: DF.Link | None
 		standby_for_product: DF.Link | None
-		status: DF.Literal["Pending", "Installing", "Updating", "Active", "Inactive", "Broken", "Archived", "Suspended"]
+		status: DF.Literal[
+			"Pending", "Installing", "Updating", "Active", "Inactive", "Broken", "Archived", "Suspended"
+		]
+
 		status_before_update: DF.Data | None
 		subdomain: DF.Data
 		tags: DF.Table[ResourceTag]
@@ -416,6 +420,7 @@ class Site(Document, TagHelpers):
 			is_valid = len(clusters) == 0 or self.cluster in clusters
 			if not is_valid:
 				frappe.throw(f"In {self.subscription_plan}, you can't deploy site in {self.cluster} cluster")
+
 			"""
 			If `allowed_apps` in site plan is empty, then site can be deployed with any apps.
 			Otherwise, site can only be deployed with the apps mentioned in the site plan.
@@ -445,6 +450,44 @@ class Site(Document, TagHelpers):
 					if app not in allowed_apps:
 						frappe.throw(f"In {self.subscription_plan}, you can't deploy site with {app} app")
 
+			is_dedicated_server_plan = frappe.db.get_value(
+				"Site Plan", self.subscription_plan, "dedicated_server_plan"
+			)
+			is_site_on_public_server = frappe.db.get_value("Server", self.server, "public")
+
+			# If site is on public server, don't allow unlimited plans
+			if is_site_on_public_server and is_dedicated_server_plan:
+				self.subscription_plan = frappe.db.get_value(
+					"Site Plan",
+					{
+						"private_benches": 1,
+						"dedicated_server_plan": 0,
+						"document_type": "Site",
+						"price_inr": ["!=", 0],
+					},
+					order_by="price_inr asc",
+				)
+
+			# If site is on dedicated server, set unlimited plan
+			elif not is_dedicated_server_plan and not is_site_on_public_server:
+				self.subscription_plan = frappe.db.get_value(
+					"Site Plan",
+					{
+						"dedicated_server_plan": 1,
+						"document_type": "Site",
+						"support_included": 0,
+					},
+				)
+
+	def capture_signup_event(self, event: str):
+		team = frappe.get_doc("Team", self.team)
+		if frappe.db.count("Site", {"team": team.name}) <= 1 and team.account_request:
+			from press.utils.telemetry import capture
+
+			account_request = frappe.get_doc("Account Request", team.account_request)
+			if not (account_request.is_saas_signup() or account_request.invited_by_parent_team):
+				capture(event, "fc_signup", team.user)
+
 	def on_update(self):
 		if self.status == "Active" and self.has_value_changed("host_name"):
 			self.update_site_config({"host_name": f"https://{self.host_name}"})
@@ -466,13 +509,7 @@ class Site(Document, TagHelpers):
 
 		# Telemetry: Send event if first site status changed to Active
 		if self.status == "Active" and self.has_value_changed("status"):
-			team = frappe.get_doc("Team", self.team)
-			if frappe.db.count("Site", {"team": team.name}) <= 1 and team.account_request:
-				from press.utils.telemetry import capture
-
-				account_request = frappe.get_doc("Account Request", team.account_request)
-				if not (account_request.is_saas_signup() or account_request.invited_by_parent_team):
-					capture("first_site_status_changed_to_active", "fc_signup", team.user)
+			self.capture_signup_event("first_site_status_changed_to_active")
 
 		if self.has_value_changed("status"):
 			create_site_status_update_webhook_event(self.name)
@@ -597,10 +634,10 @@ class Site(Document, TagHelpers):
 	def install_marketplace_conf(self, app: str, plan: str | None = None):
 		if plan:
 			MarketplaceAppPlan.create_marketplace_app_subscription(self.name, app, plan, self.team)
-		marketplace_app_hook(app=app, site=self.name, op="install")
+		marketplace_app_hook(app=app, site=self, op="install")
 
 	def uninstall_marketplace_conf(self, app: str):
-		marketplace_app_hook(app=app, site=self.name, op="uninstall")
+		marketplace_app_hook(app=app, site=self, op="uninstall")
 
 		# disable marketplace plan if it exists
 		marketplace_app_name = frappe.db.get_value("Marketplace App", {"app": app})
@@ -637,9 +674,9 @@ class Site(Document, TagHelpers):
 		if find(self.apps, lambda x: x.app == app):
 			return None
 
-		log_site_activity(self.name, "Install App", app)
 		agent = Agent(self.server)
 		job = agent.install_app_site(self, app)
+		log_site_activity(self.name, "Install App", app, job.name)
 		self.status = "Pending"
 		self.save()
 		self.install_marketplace_conf(app, plan)
@@ -649,9 +686,11 @@ class Site(Document, TagHelpers):
 	@dashboard_whitelist()
 	@site_action(["Active"])
 	def uninstall_app(self, app: str) -> str:
-		log_site_activity(self.name, "Uninstall App")
 		agent = Agent(self.server)
 		job = agent.uninstall_app_site(self, app)
+
+		log_site_activity(self.name, "Uninstall App", app, job.name)
+
 		self.uninstall_marketplace_conf(app)
 		self.status = "Pending"
 		self.save()
@@ -676,13 +715,7 @@ class Site(Document, TagHelpers):
 			add_permission_for_newly_created_doc,
 		)
 
-		team = frappe.get_doc("Team", self.team)
-		if frappe.db.count("Site", {"team": team.name}) <= 1 and team.account_request:
-			from press.utils.telemetry import capture
-
-			account_request = frappe.get_doc("Account Request", team.account_request)
-			if not (account_request.is_saas_signup() or account_request.invited_by_parent_team):
-				capture("created_first_site", "fc_signup", team.user)
+		self.capture_signup_event("created_first_site")
 
 		if hasattr(self, "subscription_plan") and self.subscription_plan:
 			# create subscription
@@ -787,9 +820,9 @@ class Site(Document, TagHelpers):
 	@dashboard_whitelist()
 	@site_action(["Active", "Broken"])
 	def reinstall(self):
-		log_site_activity(self.name, "Reinstall")
 		agent = Agent(self.server)
 		job = agent.reinstall_site(self)
+		log_site_activity(self.name, "Reinstall", job=job.name)
 		self.status = "Pending"
 		self.save()
 		return job.name
@@ -797,7 +830,6 @@ class Site(Document, TagHelpers):
 	@dashboard_whitelist()
 	@site_action(["Active", "Broken"])
 	def migrate(self, skip_failing_patches=False):
-		log_site_activity(self.name, "Migrate")
 		agent = Agent(self.server)
 		activate = True
 		if self.status in ("Inactive", "Suspended"):
@@ -808,7 +840,8 @@ class Site(Document, TagHelpers):
 			"Suspended",
 		):
 			activate = False
-		agent.migrate_site(self, skip_failing_patches=skip_failing_patches, activate=activate)
+		job = agent.migrate_site(self, skip_failing_patches=skip_failing_patches, activate=activate)
+		log_site_activity(self.name, "Migrate", job=job.name)
 		self.status = "Pending"
 		self.save()
 
@@ -854,9 +887,10 @@ class Site(Document, TagHelpers):
 
 	@dashboard_whitelist()
 	def clear_site_cache(self):
-		log_site_activity(self.name, "Clear Cache")
 		agent = Agent(self.server)
-		agent.clear_site_cache(self)
+		job = agent.clear_site_cache(self)
+
+		log_site_activity(self.name, "Clear Cache", job=job.name)
 
 	@dashboard_whitelist()
 	@site_action(["Active", "Broken"])
@@ -864,9 +898,9 @@ class Site(Document, TagHelpers):
 		if not frappe.get_doc("Remote File", self.remote_database_file).exists():
 			raise Exception(f"Remote File {self.remote_database_file} is unavailable on S3")
 
-		log_site_activity(self.name, "Restore")
 		agent = Agent(self.server)
 		job = agent.restore_site(self, skip_failing_patches=skip_failing_patches)
+		log_site_activity(self.name, "Restore", job=job.name)
 		self.status = "Pending"
 		self.save()
 		return job.name
@@ -933,13 +967,25 @@ class Site(Document, TagHelpers):
 			log_error(title="Offsite Backup Response Exception")
 
 	def site_migration_scheduled(self):
-		return frappe.db.exists("Site Migration", {"site": self.name, "status": "Scheduled"})
+		return frappe.db.get_value(
+			"Site Migration", {"site": self.name, "status": "Scheduled"}, "scheduled_time"
+		)
+
+	def site_update_scheduled(self):
+		return frappe.db.get_value(
+			"Site Update", {"site": self.name, "status": "Scheduled"}, "scheduled_time"
+		)
+
+	def check_move_scheduled(self):
+		if time := self.site_migration_scheduled():
+			frappe.throw(f"Site Migration is scheduled for {self.name} at {time}")
+		if time := self.site_update_scheduled():
+			frappe.throw(f"Site Update is scheduled for {self.name} at {time}")
 
 	def ready_for_move(self):
 		if self.status in ["Updating", "Pending", "Installing"]:
 			frappe.throw("Site is under maintenance. Cannot Update")
-		if self.site_migration_scheduled():
-			frappe.throw("Site migration is scheduled. Cannot Update")
+		self.check_move_scheduled()
 
 		self.status_before_update = self.status
 		self.status = "Pending"
@@ -954,6 +1000,7 @@ class Site(Document, TagHelpers):
 		scheduled_time: str | None = None,
 	):
 		log_site_activity(self.name, "Update")
+
 		doc = frappe.get_doc(
 			{
 				"doctype": "Site Update",
@@ -990,14 +1037,16 @@ class Site(Document, TagHelpers):
 		frappe.delete_doc("Site Update", site_update)
 
 	@frappe.whitelist()
-	def move_to_group(self, group, skip_failing_patches=False):
+	def move_to_group(self, group, skip_failing_patches=False, skip_backups=False):
 		log_site_activity(self.name, "Update")
+
 		return frappe.get_doc(
 			{
 				"doctype": "Site Update",
 				"site": self.name,
 				"destination_group": group,
 				"skipped_failing_patches": skip_failing_patches,
+				"skipped_backups": skip_backups,
 				"ignore_past_failures": True,
 			}
 		).insert()
@@ -1010,9 +1059,11 @@ class Site(Document, TagHelpers):
 		if bench == self.bench:
 			frappe.throw("Site is already on the selected bench.")
 
-		log_site_activity(self.name, "Update")
 		agent = Agent(self.server)
-		return agent.move_site_to_bench(self, bench, deactivate, skip_failing_patches)
+		job = agent.move_site_to_bench(self, bench, deactivate, skip_failing_patches)
+		log_site_activity(self.name, "Update", job=job.name)
+
+		return job
 
 	def reset_previous_status(self, fix_broken=False):
 		if self.status == "Archived":
@@ -1031,7 +1082,8 @@ class Site(Document, TagHelpers):
 	@frappe.whitelist()
 	@site_action(["Active"])
 	def update_without_backup(self):
-		log_site_activity(self.name, "Update without Backup")
+		log_site_activity(self.name, "Update")
+
 		frappe.get_doc(
 			{
 				"doctype": "Site Update",
@@ -1185,11 +1237,11 @@ class Site(Document, TagHelpers):
 	@dashboard_whitelist()
 	@site_action(["Active", "Broken", "Suspended"])
 	def archive(self, site_name=None, reason=None, force=False, skip_reload=False):
-		log_site_activity(self.name, "Archive", reason)
 		agent = Agent(self.server)
 		self.status = "Pending"
 		self.save()
-		agent.archive_site(self, site_name, force)
+		job = agent.archive_site(self, site_name, force)
+		log_site_activity(self.name, "Archive", reason, job.name)
 
 		server = frappe.get_all("Server", filters={"name": self.server}, fields=["proxy_server"], limit=1)[0]
 
@@ -1351,6 +1403,10 @@ class Site(Document, TagHelpers):
 			return None
 		agent = Agent(self.server)
 		return agent.create_user(self, email, first_name, last_name, password)
+
+	@frappe.whitelist()
+	def show_admin_password(self):
+		frappe.msgprint(self.get_password("admin_password"), title="Password", indicator="green")
 
 	def get_connection_as_admin(self):
 		password = get_decrypted_password("Site", self.name, "admin_password")
@@ -1533,11 +1589,16 @@ class Site(Document, TagHelpers):
 
 		try:
 			value = conn.get_value("System Settings", "setup_complete", "System Settings")
+		except json.JSONDecodeError:
+			# the proxy might be down or network failure
+			# that's why the response is blank and get_value try to parse the json
+			# and raise json.JSONDecodeError
+			return False
 		except Exception:
 			if self.ping().status_code == requests.codes.ok:
 				# Site is up but setup status fetch failed
 				log_error("Fetching Setup Status Failed", doc=self)
-			return None
+			return False
 
 		setup_complete = cint(value["setup_complete"])
 		if not setup_complete:
@@ -1560,13 +1621,7 @@ class Site(Document, TagHelpers):
 
 		# Telemetry: Send event if first site status changed to Active
 		if self.setup_wizard_complete:
-			team = frappe.get_doc("Team", self.team)
-			if frappe.db.count("Site", {"team": team.name}) <= 1 and team.account_request:
-				from press.utils.telemetry import capture
-
-				account_request = frappe.get_doc("Account Request", team.account_request)
-				if not (account_request.is_saas_signup() or account_request.invited_by_parent_team):
-					capture("first_site_setup_wizard_completed", "fc_signup", team.user)
+			self.capture_signup_event("first_site_setup_wizard_completed")
 
 		return setup_complete
 
@@ -2151,10 +2206,10 @@ class Site(Document, TagHelpers):
 	@dashboard_whitelist()
 	@site_action(["Active"])
 	def disable_database_access(self):
-		log_site_activity(self.name, "Disable Database Access")
-
 		server_agent = Agent(self.server)
-		server_agent.revoke_database_access_credentials(self)
+		job = server_agent.revoke_database_access_credentials(self)
+
+		log_site_activity(self.name, "Disable Database Access", job=job.name)
 
 		proxy_server = frappe.db.get_value("Server", self.server, "proxy_server")
 		agent = Agent(proxy_server, server_type="Proxy Server")
@@ -2456,6 +2511,12 @@ class Site(Document, TagHelpers):
 				"doc_method": "activate",
 			},
 			{
+				"action": "Schedule backup",
+				"description": "Schedule a backup for this site",
+				"button_label": "Schedule",
+				"doc_method": "schedule_backup",
+			},
+			{
 				"action": "Transfer site",
 				"description": "Transfer ownership of this site to another team",
 				"button_label": "Transfer",
@@ -2598,6 +2659,39 @@ class Site(Document, TagHelpers):
 		)
 		return response
 
+	@dashboard_whitelist()
+	def fetch_database_table_schemas(self, invalidate_cache=False):
+		if invalidate_cache:
+			self._fetch_database_table_schemas.clear_cache()
+		return self._fetch_database_table_schemas()
+
+	@redis_cache(ttl=3600)
+	def _fetch_database_table_schemas(self):
+		try:
+			return Agent(self.server).fetch_database_table_schemas(self)
+		except Exception:
+			frappe.log_error(
+				"Failed to fetch database schema", reference_doctype="Site", reference_name=self.name
+			)
+
+	@dashboard_whitelist()
+	def run_sql_query_in_database(self, query: str, commit: bool):
+		if not query:
+			return {"success": False, "output": "SQL Query cannot be empty"}
+		doc = frappe.get_doc(
+			{
+				"doctype": "SQL Playground Log",
+				"site": self.name,
+				"team": self.team,
+				"query": query,
+				"committed": commit,
+			}
+		)
+		response = Agent(self.server).run_sql_query_in_database(self, query, commit)
+		doc.is_successful = response.get("success", False)
+		doc.insert(ignore_permissions=True)
+		return response
+
 
 def site_cleanup_after_archive(site):
 	delete_site_domains(site)
@@ -2661,7 +2755,7 @@ def process_new_site_job_update(job):  # noqa: C901
 
 	if "Success" == first == second:
 		updated_status = "Active"
-		marketplace_app_hook(site=job.site, op="install")
+		marketplace_app_hook(site=Site("Site", job.site), op="install")
 	elif "Failure" in (first, second) or "Delivery Failure" in (first, second):
 		updated_status = "Broken"
 	elif "Running" in (first, second):
@@ -2861,12 +2955,12 @@ def process_marketplace_hooks_for_backup_restore(apps_from_backup: set[str], sit
 		if (
 			frappe.get_cached_value("Marketplace App", app, "subscription_type") == "Free"
 		):  # like india_compliance; no need to check subscription
-			marketplace_app_hook(app=app, site=site.name, op="install")
+			marketplace_app_hook(app=app, site=site, op="install")
 	for app in apps_to_uninstall:
 		if (
 			frappe.get_cached_value("Marketplace App", app, "subscription_type") == "Free"
 		):  # like india_compliance; no need to check subscription
-			marketplace_app_hook(app=app, site=site.name, op="uninstall")
+			marketplace_app_hook(app=app, site=site, op="uninstall")
 
 
 def process_restore_job_update(job, force=False):

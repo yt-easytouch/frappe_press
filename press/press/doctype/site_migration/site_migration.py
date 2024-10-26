@@ -78,6 +78,8 @@ class SiteMigration(Document):
 		self.check_enough_space_on_destination_server()
 		if get_ongoing_migration(self.site, scheduled=True):
 			frappe.throw(f"Ongoing/Scheduled Site Migration for the site {frappe.bold(self.site)} exists.")
+		site: Site = frappe.get_doc("Site", self.site)
+		site.check_move_scheduled()
 
 	def validate_bench(self):
 		if frappe.db.get_value("Bench", self.destination_bench, "status", for_update=True) != "Active":
@@ -129,7 +131,6 @@ class SiteMigration(Document):
 		self.check_enough_space_on_destination_server()
 		site: Site = frappe.get_doc("Site", self.site)
 		site.ready_for_move()
-		frappe.db.commit()
 		self.run_next_step()
 
 	@frappe.whitelist()
@@ -668,6 +669,8 @@ def run_scheduled_migrations():
 			site_migration.fail(reason=str(e), activate=True)
 		except InsufficientSpaceOnServer as e:
 			site_migration.fail(reason=str(e), activate=True)
+		except Exception as e:
+			log_error("Site Migration Start Error", e)
 
 
 def on_doctype_update():
