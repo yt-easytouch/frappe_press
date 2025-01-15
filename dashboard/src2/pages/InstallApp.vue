@@ -146,7 +146,7 @@
 							v-model="agreedToRegionConsent"
 							:label="`I agree that the laws of the region selected by me ${
 								this.cluster ? `(${this.cluster})` : ''
-							} shall stand applicable to me and Frappe.`"
+							} shall stand applicable to me and Easytouch.`"
 						/>
 						<ErrorMessage class="my-2" :message="$resources.newSite.error" />
 						<Button
@@ -169,7 +169,7 @@
 					</div>
 					<a
 						class="text-sm underline"
-						href="https://frappecloud.com/docs/installing-an-app"
+						href="https://easytouch.cloud/docs/installing-an-app"
 						target="_blank"
 					>
 						Read documentation

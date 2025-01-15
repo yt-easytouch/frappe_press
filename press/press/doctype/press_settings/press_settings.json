@@ -42,6 +42,14 @@
   "razorpay_webhook_secret",
   "column_break_123",
   "razorpay_key_secret",
+  "bitiwallet_settings_section",
+  "bitiwallet_key_id",
+  "bitiwallet_webhook_secret",
+  "column_break_biti_1",
+  "bitiwallet_key_secret",
+  "bitiwallet_merchant_id",
+  "column_break_biti_2",
+  "bitiwallet_type",
   "erpnext_authentication",
   "erpnext_url",
   "erpnext_api_key",
@@ -170,9 +178,11 @@
   "agent_github_access_token",
   "branch",
   "lets_encrypt_section",
+  "certificate_type",
   "certbot_directory",
   "webroot_directory",
   "rsa_key_size",
+  "dns_20i_bearer",
   "column_break_15",
   "eff_registration_email",
   "use_staging_ca",
@@ -340,6 +350,46 @@
    "fieldtype": "Password",
    "label": "Razorpay Key Secret"
   },
+  {
+    "collapsible": 1,
+    "fieldname": "bitiwallet_settings_section",
+    "fieldtype": "Section Break",
+    "label": "Biti Wallet Settings"
+   },
+   {
+    "fieldname": "bitiwallet_key_id",
+    "fieldtype": "Data",
+    "label": "Biti Wallet Key ID"
+   },
+   {
+    "fieldname": "bitiwallet_webhook_secret",
+    "fieldtype": "Data",
+    "label": "Biti Wallet Webhook Secret"
+   },
+   {
+    "fieldname": "column_break_biti_1",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "bitiwallet_key_secret",
+    "fieldtype": "Password",
+    "label": "Biti Wallet Key Secret"
+   },
+   {
+    "fieldname": "bitiwallet_merchant_id",
+    "fieldtype": "Data",
+    "label": "Biti Wallet Merchant ID"
+   },
+   {
+     "fieldname": "column_break_biti_2",
+     "fieldtype": "Column Break"
+    },
+   {
+    "fieldname": "bitiwallet_type",
+    "fieldtype": "Select",
+    "label": "Biti Wallet Type",
+    "options": "Standard\nExpress"
+   },
   {
    "collapsible": 1,
    "fieldname": "erpnext_authentication",
@@ -869,6 +919,14 @@
    "label": "Let's Encrypt"
   },
   {
+    "default": "LetsEncrypt",
+    "fieldname": "certificate_type",
+    "fieldtype": "Select",
+    "label": "Certificate Type",
+    "options": "LetsEncrypt\nScmeSH",
+    "reqd": 1
+   },
+  {
    "fieldname": "certbot_directory",
    "fieldtype": "Data",
    "label": "Certbot Directory",
@@ -887,6 +945,12 @@
    "options": "2048\n3072\n4096",
    "reqd": 1
   },
+  {
+    "fieldname": "dns_20i_bearer",
+    "fieldtype": "Data",
+    "label": "DNS 20I Bearer",
+    "reqd": 0
+   },
   {
    "fieldname": "column_break_15",
    "fieldtype": "Column Break"

@@ -23,6 +23,7 @@
 		"tailwindcss": "^3.2"
 	},
 	"dependencies": {
+		"@tanstack/vue-table": "^8.20.5",
 		"dayjs": "^1.11.10",
 		"frappe-ui": "^0.1.70",
 		"fuse.js": "^6.6.2",

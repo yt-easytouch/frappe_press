@@ -66,15 +66,15 @@
 								By clicking on
 								<span>{{ isInvitation ? 'Accept' : 'Create account' }}</span
 								>, you accept our
-								<Link href="https://frappecloud.com/terms" target="_blank"
+								<Link href="https://easytouch.cloud/terms" target="_blank"
 									>Terms of Service </Link
 								>,
-								<Link href="https://frappecloud.com/privacy" target="_blank">
+								<Link href="https:/easytouch.cloud/privacy" target="_blank">
 									Privacy Policy
 								</Link>
 								&#38;
 								<Link
-									href="https://frappecloud.com/cookie-policy"
+									href="https://easytouch.cloud/cookie-policy"
 									target="_blank"
 								>
 									Cookie Policy

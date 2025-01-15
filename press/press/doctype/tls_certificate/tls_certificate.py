@@ -83,7 +83,10 @@ class TLSCertificate(Document):
 	def _obtain_certificate(self):
 		try:
 			settings = frappe.get_doc("Press Settings", "Press Settings")
-			ca = LetsEncrypt(settings)
+			certificate_type = settings.certificate_type or "LetsEncrypt"  # Default to LetsEncrypt
+			
+			certificate_class = self._get_certificate_class(certificate_type)
+			ca = certificate_class(settings)
 			(
 				self.certificate,
 				self.full_chain,
@@ -122,6 +125,20 @@ class TLSCertificate(Document):
 		if self.wildcard:
 			self.trigger_server_tls_setup_callback()
 			self._update_secondary_wildcard_domains()
+   
+	def _get_certificate_class(self, certificate_type):
+		"""
+		Dynamically returns the certificate provider class based on the type.
+		"""
+		certificate_classes = {
+			"LetsEncrypt": LetsEncrypt,  # Uses certbot
+			"ScmeSH": ScmeSH,        # Uses acme.sh
+			}
+
+		if certificate_type not in certificate_classes:
+			raise frappe.ValidationError(f"Invalid certificate type: {certificate_type}")
+
+		return certificate_classes[certificate_type]
 
 	def _update_secondary_wildcard_domains(self):
 		"""
@@ -387,10 +404,17 @@ class LetsEncrypt(BaseCA):
 
 	def _certbot_command(self):
 		if self.wildcard or frappe.conf.developer_mode:
-			plugin = "--dns-route53"
+			plugin = (
+				f"--authenticator dns-20i "
+				f"--dns-20i-credentials {self.directory}/.secrets/twentyi.json "
+				f"--dns-20i-propagation-seconds 5"
+				)
+		 #	plugin = "--dns-route53"
 		else:
 			plugin = f"--webroot --webroot-path {self.webroot_directory}"
+		
 
+    
 		staging = "--staging" if self.staging else ""
 		force_renewal = "--keep" if frappe.conf.developer_mode else "--force-renewal"
 
@@ -435,3 +459,53 @@ class LetsEncrypt(BaseCA):
 	@property
 	def private_key_file(self):
 		return os.path.join(self.directory, "live", self.domain, "privkey.pem")
+
+class ScmeSH(BaseCA):
+    def _obtain(self):
+        # Using acme.sh for certificate issuance
+        acme_home = os.path.join(self.settings.certbot_directory, "acme.sh", "live")
+        os.makedirs(acme_home, exist_ok=True)
+        
+        bearer_token = self.settings.dns_20i_bearer
+        if not bearer_token:
+            raise frappe.ValidationError("Bearer token for 20i DNS is not configured in Press Settings.")
+        
+        plugin = f"--dns dns_20i --bearer {bearer_token} " if self.wildcard else f"--webroot --webroot-path {self.settings.webroot_directory}"
+        staging = "--staging" if frappe.conf.developer_mode else ""
+        force_renewal = "--force"
+        
+        acme_sh_path = "/usr/local/acme.sh/acme.sh"
+        command = (
+            f"{acme_sh_path} --issue {plugin} {staging} {force_renewal} "
+            f"--keylength {self.rsa_key_size} "
+            f"-d {self.domain} "
+            f"--home {acme_home} "
+            f"--accountemail {self.settings.eff_registration_email}"
+        )
+
+        try:
+            subprocess.check_output(shlex.split(command), stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as e:
+            output = (e.output or b"").decode()
+            log_error("acme.sh Exception", command=command, output=output)
+            raise e
+
+    @property
+    def certificate_file(self):
+        # Match `acme.sh` generated file for the certificate
+        return os.path.join(self.settings.certbot_directory, "acme.sh", "live", self.domain, f"{self.domain}.cer")
+
+    @property
+    def full_chain_file(self):
+        # Match `acme.sh` generated file for the full chain
+        return os.path.join(self.settings.certbot_directory, "acme.sh", "live", self.domain, "fullchain.cer")
+
+    @property
+    def intermediate_chain_file(self):
+        # Match `acme.sh` generated file for the intermediate certificate
+        return os.path.join(self.settings.certbot_directory, "acme.sh", "live", self.domain, "ca.cer")
+
+    @property
+    def private_key_file(self):
+        # Match `acme.sh` generated file for the private key
+        return os.path.join(self.settings.certbot_directory, "acme.sh", "live", self.domain, f"{self.domain}.key")
