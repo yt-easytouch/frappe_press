@@ -127,7 +127,10 @@ function onDropSite() {
 		message: `
             Are you sure you want to drop your site? The site will be archived and
             all of its files and Offsite Backups will be deleted. This action cannot
-            be undone.
+            be undone.<br>
+			Site Name:  <b>${
+			site.doc.name
+		}</b>?
         `,
 		fields: [
 			{

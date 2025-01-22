@@ -3,7 +3,7 @@
 five_star_rating, approved_badge -%}
 
 {%- block title -%}
-{{ app.title }} - Frappe Cloud Marketplace
+{{ app.title }} - Easytouch Cloud Marketplace
 {%- endblock -%}
 
 {%- block content -%}
@@ -102,11 +102,7 @@ five_star_rating, approved_badge -%}
 		<ul class="mt-2 space-y-2 text-sm text-gray-600">
 			{%- for supported_version in supported_versions -%}
 			<li>
-				{{
-				link(supported_version.version,
-				supported_version.frappe_source.repository_url + '/tree/' +
-				supported_version.frappe_source.branch, blank=True)
-				}}
+				{{supported_version.version }}
 			</li>
 			{%- endfor -%}
 		</ul>

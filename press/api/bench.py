@@ -266,6 +266,8 @@ def options():
 					"branch": source.branch,
 					"repository": source.repository,
 					"repository_owner": source.repository_owner,
+					"auto_add_list": source.auto_add_list,
+					"main_app": source.frappe,
 				}
 				app_dict.setdefault("sources", []).append(source_dict)
 

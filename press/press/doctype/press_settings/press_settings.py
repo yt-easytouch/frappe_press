@@ -193,10 +193,10 @@ class PressSettings(Document):
 	@frappe.whitelist()
 	def get_github_app_manifest(self):
 		if frappe.conf.developer_mode:
-			app_name = f"Frappe Cloud {frappe.generate_hash(length=6).upper()}"
+			app_name = f"Easytouch Cloud {frappe.generate_hash(length=6).upper()}"
 		else:
-			app_name = "Frappe Cloud"
-		return {
+			app_name = "Easytouch Cloud"
+		return  {
 			"name": app_name,
 			"url": "https://frappe.cloud",
 			"hook_attributes": {"url": get_url("api/method/press.api.github.hook")},

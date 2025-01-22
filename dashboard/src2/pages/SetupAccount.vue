@@ -66,7 +66,7 @@
 								By clicking on
 								<span>{{ isInvitation ? 'Accept' : 'Create account' }}</span
 								>, you accept our
-								<Link href="https://frappecloud.com/policies" target="_blank"
+								<Link href="https://easytouch.cloud/policies" target="_blank"
 									>Terms and Policies</Link
 								>
 							</label>

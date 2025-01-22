@@ -8,7 +8,7 @@ Steps to setup your own production/development press installation.
 
 ### Basic
 
-- **Domain** - Domain to use for Frappe Cloud sites and servers. You should have access to the DNS settings of this domain (See DNS section).
+- **Domain** - Domain to use for Easytouch Cloud sites and servers. You should have access to the DNS settings of this domain (See DNS section).
 
 ### DNS
 

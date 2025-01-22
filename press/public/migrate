@@ -1,6 +1,6 @@
 #!./env/bin/python
-# Fallback Script to run the easy migrate script in place of `bench migrate-to`
-# This file was originally hosted on Frappe Cloud. For more information, contact us at frappecloud.com
+# Fallback Script to run the easy migrate script in place of `bench --site {site} migrate-to frappecloud.com`
+# This file was originally hosted on Easytouch Cloud. For more information, contact us at frappecloud.com
 # Copyright (c) 2020, Frappe Technologies Pvt. Ltd.
 
 import os
@@ -16,7 +16,8 @@ def get_remote_script(remote_site):
 	if request.status_code / 100 != 2:
 		print(f"Request exited with Status Code: {request.status_code}\nPayload: {html2text(request.text)}")
 		click.secho(
-			"Some errors occurred while recovering the migration script. Please contact us @ Frappe Cloud if this issue persists",
+			"Some errors occurred while recovering the migration script. Please contact"
+			" us @ Easytouch Cloud if this issue persists",
 			fg="yellow",
 		)
 		return

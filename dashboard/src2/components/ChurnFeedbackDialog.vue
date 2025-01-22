@@ -41,7 +41,7 @@
 				class="mt-4"
 				type="textarea"
 				variant="outline"
-				placeholder="I am leaving Frappe Cloud because..."
+				placeholder="I am leaving Easytouch Cloud because..."
 				size="md"
 				v-model="note"
 			/>
@@ -121,9 +121,9 @@ export default {
 				'I am moving to a different product e.g ZOHO, Quickbooks, etc.',
 				'I was just exploring the product',
 				'I prefer self-hosting my instance',
-				'Moved site to another Frappe Cloud account',
-				'I did not like the Frappe Cloud experience',
-				'Frappe Cloud is too expensive for me',
+				'Moved site to another Easytouch Cloud account',
+				'I did not like the Easytouch Cloud experience',
+				'Easytouch Cloud is too expensive for me',
 				'Payment issues',
 				'Features were missing',
 				'My reason is not listed here'

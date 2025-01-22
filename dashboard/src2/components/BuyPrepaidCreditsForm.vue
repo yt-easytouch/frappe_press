@@ -54,6 +54,21 @@
 				/>
 			</button>
 			<button
+				@click="paymentGateway = 'BitiWallet'"
+				label="BitiWallet"
+				class="flex h-10 items-center justify-center rounded border"
+				:class="{
+					'border-gray-300': paymentGateway !== 'BitiWallet',
+					'border-gray-900 ring-1 ring-gray-900': paymentGateway === 'BitiWallet'
+				}"
+			>
+				<img
+					class="h-7 w-24"
+					:src="`/assets/press/images/biti-logo.svg`"
+					alt="BitiWallet"
+				/>
+			</button>
+			<button
 				@click="paymentGateway = 'Stripe'"
 				label="Stripe"
 				class="flex h-10 items-center justify-center rounded border"
@@ -87,16 +102,26 @@
 		@success="onSuccess"
 		@cancel="onCancel"
 	/>
+	<BuyPrepaidCreditsBiti
+		v-if="paymentGateway === 'BitiWallet'"
+		:amount="creditsToBuy"
+		:minimumAmount="minimumAmount"
+		:isOnboarding="isOnboarding"
+		@success="onSuccess"
+		@cancel="onCancel"
+	/>
 </template>
 <script>
 import BuyPrepaidCreditsStripe from './BuyPrepaidCreditsStripe.vue';
 import BuyPrepaidCreditsRazorpay from './BuyPrepaidCreditsRazorpay.vue';
+import BuyPrepaidCreditsBiti from './BuyPrepaidCreditsBiti.vue';
 
 export default {
 	name: 'BuyPrepaidCreditsForm',
 	components: {
 		BuyPrepaidCreditsStripe,
-		BuyPrepaidCreditsRazorpay
+		BuyPrepaidCreditsRazorpay,
+		BuyPrepaidCreditsBiti
 	},
 	data() {
 		return {

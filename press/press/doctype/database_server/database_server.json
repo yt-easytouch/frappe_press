@@ -122,8 +122,7 @@
   {
    "fieldname": "mariadb_root_password",
    "fieldtype": "Password",
-   "label": "MariaDB Root Password",
-   "read_only": 1
+   "label": "MariaDB Root Password"
   },
   {
    "fieldname": "agent_section",
