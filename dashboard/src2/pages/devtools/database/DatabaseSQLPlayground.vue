@@ -38,14 +38,14 @@
 					v-model="site"
 				/>
 				<Button
-					iconLeft="refresh-ccw"
+					icon="refresh-ccw"
 					variant="subtle"
-					:loading="$resources.tableSchemas.loading"
+					:loading="site && !isAutoCompletionReady"
 					:disabled="!site"
 					@click="
 						() =>
 							fetchTableSchemas({
-								invalidate_cache: true
+								reload: true
 							})
 					"
 				>
@@ -57,29 +57,50 @@
 	</Header>
 	<div class="m-5">
 		<!-- body -->
-		<div class="mt-2 flex flex-col" v-if="isSQLEditorReady">
+		<div
+			v-if="!site"
+			class="flex h-full min-h-[80vh] w-full items-center justify-center gap-2 text-gray-700"
+		>
+			Select a site to get started
+		</div>
+		<div class="mt-2 flex flex-col" v-else>
 			<div class="overflow-hidden rounded border">
 				<SQLCodeEditor
 					v-model="query"
-					v-if="sqlSchemaForAutocompletion"
 					:schema="sqlSchemaForAutocompletion"
+					@codeSelected="handleCodeSelected"
+					@codeUnselected="handleCodeUnselected"
 				/>
 			</div>
 			<div class="mt-2 flex flex-row items-center justify-between">
 				<div class="flex gap-2">
-					<Button iconLeft="table" @click="toggleTableSchemasDialog"
+					<Button
+						iconLeft="table"
+						@click="toggleTableSchemasDialog"
+						:disabled="!isAutoCompletionReady"
 						>Tables</Button
 					>
 					<Button iconLeft="file-text" @click="toggleLogsDialog">Logs</Button>
 				</div>
 
-				<Button
-					@click="() => runSQLQuery()"
-					:loading="$resources.runSQLQuery.loading"
-					iconLeft="play"
-					variant="solid"
-					>Run Query</Button
-				>
+				<div class="flex gap-2">
+					<Button
+						v-if="selectedQuery"
+						@click="runSelectedSQLQuery"
+						:loading="$resources.runSQLQuery.loading"
+						iconLeft="play"
+						variant="outline"
+					>
+						Run Selected Query
+					</Button>
+					<Button
+						@click="() => runSQLQuery()"
+						:loading="$resources.runSQLQuery.loading"
+						iconLeft="play"
+						variant="solid"
+						>Run Query</Button
+					>
+				</div>
 			</div>
 			<div
 				class="mt-4"
@@ -107,18 +128,7 @@
 				</div>
 			</div>
 		</div>
-		<div
-			v-else-if="!site"
-			class="flex h-full min-h-[80vh] w-full items-center justify-center gap-2 text-gray-700"
-		>
-			Select a site to get started
-		</div>
-		<div
-			class="flex h-full min-h-[80vh] w-full items-center justify-center gap-2 text-gray-700"
-			v-else
-		>
-			<Spinner class="w-4" /> Setting Up SQL Playground
-		</div>
+
 		<DatabaseSQLPlaygroundLog
 			v-if="this.site"
 			:site="this.site"
@@ -128,8 +138,9 @@
 		<DatabaseTableSchemaDialog
 			v-if="this.site"
 			:site="this.site"
-			:tableSchemas="$resources.tableSchemas?.data?.message ?? {}"
+			:tableSchemas="$resources.tableSchemas?.data?.message?.data ?? {}"
 			v-model="showTableSchemasDialog"
+			:showSQLActions="true"
 			@runSQLQuery="runSQLQueryForViewingTable"
 		/>
 	</div>
@@ -143,13 +154,14 @@
 import { toast } from 'vue-sonner';
 import Header from '../../../components/Header.vue';
 import { Tabs, Breadcrumbs } from 'frappe-ui';
-import SQLResultTable from '../../../components/devtools/database/SQLResultTable.vue';
+import SQLResultTable from '../../../components/devtools/database/ResultTable.vue';
 import SQLCodeEditor from '../../../components/devtools/database/SQLCodeEditor.vue';
 import { confirmDialog } from '../../../utils/components';
 import DatabaseSQLPlaygroundLog from '../../../components/devtools/database/DatabaseSQLPlaygroundLog.vue';
 import DatabaseTableSchemaDialog from '../../../components/devtools/database/DatabaseTableSchemaDialog.vue';
 import SQLResult from '../../../components/devtools/database/SQLResult.vue';
 import LinkControl from '../../../components/LinkControl.vue';
+import { getToastErrorMessage } from '../../../utils/toast';
 
 export default {
 	name: 'DatabaseSQLPlayground',
@@ -169,6 +181,7 @@ export default {
 			site: null,
 			tabIndex: 0,
 			query: '',
+			selectedQuery: null,
 			commit: false,
 			execution_successful: null,
 			data: null,
@@ -222,11 +235,7 @@ export default {
 					this.tabIndex = 0; // reset tab index for results
 				},
 				onError: e => {
-					toast.error(
-						e.messages?.length
-							? e.messages.join('\n')
-							: e.message || 'Failed to run SQL query'
-					);
+					toast.error(getToastErrorMessage(e, 'Failed to run SQL query'));
 				},
 				auto: false
 			};
@@ -235,19 +244,25 @@ export default {
 			return {
 				url: 'press.api.client.run_doc_method',
 				initialData: {},
-				auto: false
+				auto: false,
+				onSuccess: data => {
+					if (data?.message?.loading) {
+						setTimeout(this.fetchTableSchemas, 5000);
+					}
+				}
 			};
 		}
 	},
 	computed: {
 		sqlSchemaForAutocompletion() {
-			const tableSchemas = this.$resources.tableSchemas?.data?.message ?? {};
+			const tableSchemas =
+				this.$resources.tableSchemas?.data?.message?.data ?? {};
 			if (!tableSchemas || !Object.keys(tableSchemas).length) return null;
 			let childrenSchemas = {};
 			for (const tableName in tableSchemas) {
 				childrenSchemas[tableName] = {
 					self: { label: tableName, type: 'table' },
-					children: tableSchemas[tableName].map(x => ({
+					children: tableSchemas[tableName].columns.map(x => ({
 						label: x.column,
 						type: 'column',
 						detail: x.data_type
@@ -259,8 +274,11 @@ export default {
 				children: childrenSchemas
 			};
 		},
-		isSQLEditorReady() {
+		isAutoCompletionReady() {
 			if (this.$resources.tableSchemas.loading) return false;
+			if (this.$resources.tableSchemas?.data?.message?.loading) return false;
+			if (!this.$resources.tableSchemas?.data?.message?.data) return false;
+			if (this.$resources.tableSchemas?.data?.message?.data == {}) return false;
 			if (!this.sqlSchemaForAutocompletion) return false;
 			return true;
 		},
@@ -278,19 +296,25 @@ export default {
 		}
 	},
 	methods: {
-		fetchTableSchemas({ site_name = null, invalidate_cache = false } = {}) {
+		handleCodeSelected(selectedCode) {
+			this.selectedQuery = selectedCode;
+		},
+		handleCodeUnselected() {
+			this.selectedQuery = null;
+		},
+		fetchTableSchemas({ site_name = null, reload = false } = {}) {
 			if (!site_name) site_name = this.site;
 			if (!site_name) return;
 			this.$resources.tableSchemas.submit({
 				dt: 'Site',
 				dn: site_name,
-				method: 'fetch_database_table_schemas',
+				method: 'fetch_database_table_schema',
 				args: {
-					invalidate_cache
+					reload
 				}
 			});
 		},
-		runSQLQuery(ignore_validation = false) {
+		runSQLQuery(ignore_validation = false, run_selected_query = false) {
 			if (!this.query) return;
 			if (this.mode === 'read-only' || ignore_validation) {
 				this.$resources.runSQLQuery.submit({
@@ -298,7 +322,7 @@ export default {
 					dn: this.site,
 					method: 'run_sql_query_in_database',
 					args: {
-						query: this.query,
+						query: run_selected_query ? this.selectedQuery : this.query,
 						commit: this.mode === 'read-write'
 					}
 				});
@@ -315,7 +339,28 @@ Are you sure you want to run the query?`,
 					label: 'Run Query',
 					variant: 'solid',
 					onClick: ({ hide }) => {
-						this.runSQLQuery(true);
+						this.runSQLQuery(true, run_selected_query);
+						hide();
+					}
+				}
+			});
+		},
+		runSelectedSQLQuery() {
+			if (!this.selectedQuery) {
+				return;
+			}
+			confirmDialog({
+				title: 'Verify Query',
+				message: `
+Are you sure you want to run the query?
+<br>
+<pre class="mt-2 max-h-52 overflow-y-auto whitespace-pre-wrap rounded bg-gray-50 px-2 py-1.5 text-sm text-gray-700">${this.selectedQuery}</pre>
+				`,
+				primaryAction: {
+					label: 'Run Query',
+					variant: 'solid',
+					onClick: ({ hide }) => {
+						this.runSQLQuery(false, true);
 						hide();
 					}
 				}
@@ -325,6 +370,10 @@ Are you sure you want to run the query?`,
 			this.showLogsDialog = !this.showLogsDialog;
 		},
 		toggleTableSchemasDialog() {
+			if (!this.isAutoCompletionReady) {
+				toast.error('Table schemas are still loading. Please wait.');
+				return;
+			}
 			this.showTableSchemasDialog = !this.showTableSchemasDialog;
 		},
 		rerunQuery(query) {

@@ -19,6 +19,7 @@ from press.api.client import dashboard_whitelist
 from press.utils import log_error
 
 if TYPE_CHECKING:
+	from press.press.doctype.agent_job.agent_job import AgentJob
 	from press.press.doctype.site.site import Site
 
 
@@ -259,6 +260,21 @@ class SiteUpdate(Document):
 			},
 		)
 
+	def is_workload_diff_high(self) -> bool:
+		site_plan = frappe.get_value("Site", self.site, "plan")
+		cpu = frappe.get_value("Site Plan", site_plan, "cpu_time_per_day") or 0  # if plan not set, assume 0
+
+		THRESHOLD = 8  # USD 100 site equivalent. (Since workload is based off of CPU)
+
+		workload_diff_high = cpu >= THRESHOLD
+
+		if not workload_diff_high:
+			source_bench = frappe.get_doc("Bench", self.source_bench)
+			dest_bench = frappe.get_doc("Bench", self.destination_bench)
+			workload_diff_high = (dest_bench.workload - source_bench.workload) > THRESHOLD
+
+		return workload_diff_high
+
 	def reallocate_workers(self):
 		"""
 		Reallocate workers on source and destination benches
@@ -267,27 +283,18 @@ class SiteUpdate(Document):
 		"""
 		group = frappe.get_doc("Release Group", self.destination_group)
 
-		if group.public or group.central_bench:
+		if group.public or group.central_bench or not self.is_workload_diff_high():
 			return
 
-		server = frappe.get_doc("Server", self.server)
-		source_bench = frappe.get_doc("Bench", self.source_bench)
-		dest_bench = frappe.get_doc("Bench", self.destination_bench)
-
-		workload_diff = dest_bench.workload - source_bench.workload
-		if (
-			server.new_worker_allocation
-			and workload_diff >= 8  # USD 100 site equivalent. (Since workload is based off of CPU)
-		):
-			frappe.enqueue_doc(
-				"Server",
-				server.name,
-				method="auto_scale_workers",
-				job_id=f"auto_scale_workers:{server.name}",
-				deduplicate=True,
-				enqueue_after_commit=True,
-				at_front=True,
-			)
+		frappe.enqueue_doc(
+			"Server",
+			self.server,
+			method="auto_scale_workers",
+			job_id=f"auto_scale_workers:{self.server}",
+			deduplicate=True,
+			enqueue_after_commit=True,
+			at_front=True,
+		)
 
 	@frappe.whitelist()
 	def trigger_recovery_job(self):
@@ -501,7 +508,7 @@ def is_site_in_deploy_hours(site):
 	return False
 
 
-def process_update_site_job_update(job):  # noqa: C901
+def process_update_site_job_update(job: AgentJob):  # noqa: C901
 	updated_status = job.status
 	site_update = frappe.get_all(
 		"Site Update",
@@ -528,7 +535,7 @@ def process_update_site_job_update(job):  # noqa: C901
 			"status",
 		)
 		if site_enable_step_status == "Success":
-			frappe.get_doc("Site Update", site_update.name).reallocate_workers()
+			SiteUpdate("Site Update", site_update.name).reallocate_workers()
 
 		frappe.db.set_value("Site Update", site_update.name, "status", updated_status)
 		if updated_status == "Running":
@@ -539,13 +546,17 @@ def process_update_site_job_update(job):  # noqa: C901
 			frappe.get_doc("Site", job.site).reset_previous_status()
 		elif updated_status == "Failure":
 			frappe.db.set_value("Site", job.site, "status", "Broken")
+			frappe.db.set_value(
+				"Site Update",
+				site_update.name,
+				"cause_of_failure_is_resolved",
+				job.failed_because_of_agent_update,
+			)
 			if not frappe.db.get_value("Site Update", site_update.name, "skipped_backups"):
 				trigger_recovery_job(site_update.name)
 			else:
 				frappe.db.set_value("Site Update", site_update.name, "status", "Fatal")
-
-	if job.status == "Failure":
-		send_job_failure_notification(job.name)
+				SiteUpdate("Site Update", site_update.name).reallocate_workers()
 
 
 def process_update_site_recover_job_update(job):
@@ -576,9 +587,6 @@ def process_update_site_recover_job_update(job):
 		elif updated_status == "Fatal":
 			frappe.db.set_value("Site", job.site, "status", "Broken")
 
-	if job.status == "Failure":
-		send_job_failure_notification(job.name)
-
 
 def mark_stuck_updates_as_fatal():
 	frappe.db.set_value(
@@ -608,34 +616,6 @@ def run_scheduled_updates():
 		except Exception:
 			log_error("Scheduled Site Update Error", update=update)
 			frappe.db.rollback()
-
-
-def send_job_failure_notification(job_name):
-	from press.press.doctype.press_notification.press_notification import (
-		create_new_notification,
-	)
-
-	job_site, job_type = frappe.db.get_value("Agent Job", job_name, ["site", "job_type"])
-	notification_type, message = "", ""
-
-	if job_type == "Update Site Migrate":
-		notification_type = "Site Migrate"
-		message = f"Site <b>{job_site}</b> failed to migrate"
-	elif job_type == "Update Site Pull":
-		notification_type = "Site Update"
-		message = f"Site <b>{job_site}</b> failed to update"
-	elif job_type.startswith("Recover Failed"):
-		notification_type = "Site Recovery"
-		message = f"Site <b>{job_site}</b> failed to recover after a failed update/migration"
-
-	if notification_type:
-		create_new_notification(
-			frappe.get_value("Site", job_site, "team"),
-			notification_type,
-			"Agent Job",
-			job_name,
-			message,
-		)
 
 
 def on_doctype_update():

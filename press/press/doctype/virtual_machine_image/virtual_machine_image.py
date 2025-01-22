@@ -27,12 +27,14 @@ class VirtualMachineImage(Document):
 
 		cluster: DF.Link
 		copied_from: DF.Link | None
+		has_data_volume: DF.Check
 		image_id: DF.Data | None
 		instance_id: DF.Data
 		mariadb_root_password: DF.Password | None
 		platform: DF.Data | None
 		public: DF.Check
 		region: DF.Link
+		root_size: DF.Int
 		series: DF.Literal["n", "f", "m", "c", "p", "e", "r"]
 		size: DF.Int
 		snapshot_id: DF.Data | None
@@ -98,15 +100,18 @@ class VirtualMachineImage(Document):
 				self.platform = image["Architecture"]
 				volume = find(image["BlockDeviceMappings"], lambda x: "Ebs" in x)
 				# This information is not accurate for images created from multiple volumes
-				if volume and "VolumeSize" in volume["Ebs"]:
-					self.size = volume["Ebs"]["VolumeSize"]
+				attached_snapshots = []
 				if volume and "SnapshotId" in volume["Ebs"]:
 					self.snapshot_id = volume["Ebs"]["SnapshotId"]
 				for volume in image["BlockDeviceMappings"]:
 					if "Ebs" not in volume:
 						# We don't care about non-EBS (instance store) volumes
 						continue
-					snapshot_id = volume["Ebs"]["SnapshotId"]
+					snapshot_id = volume["Ebs"].get("SnapshotId")
+					if not snapshot_id:
+						# We don't care about volumes without snapshots
+						continue
+					attached_snapshots.append(snapshot_id)
 					existing = find(self.volumes, lambda x: x.snapshot_id == snapshot_id)
 					device = volume["DeviceName"]
 					volume_type = volume["Ebs"]["VolumeType"]
@@ -125,6 +130,12 @@ class VirtualMachineImage(Document):
 								"size": size,
 							},
 						)
+				for volume in list(self.volumes):
+					if volume.snapshot_id not in attached_snapshots:
+						self.remove(volume)
+
+				self.size = self.get_data_volume().size
+				self.root_size = self.get_data_volume().size
 			else:
 				self.status = "Unavailable"
 		elif cluster.cloud_provider == "OCI":
@@ -210,7 +221,9 @@ class VirtualMachineImage(Document):
 		return None
 
 	@classmethod
-	def get_available_for_series(cls, series: str, region: str | None = None) -> str | None:
+	def get_available_for_series(
+		cls, series: str, region: str | None = None, platform: str | None = None
+	) -> str | None:
 		images = frappe.qb.DocType(cls.DOCTYPE)
 		get_available_images = (
 			frappe.qb.from_(images)
@@ -220,10 +233,36 @@ class VirtualMachineImage(Document):
 			.where(
 				images.series == series,
 			)
+			.orderby(images.creation, order=frappe.qb.desc)
 		)
 		if region:
 			get_available_images = get_available_images.where(images.region == region)
+		if platform:
+			get_available_images = get_available_images.where(images.platform == platform)
 		available_images = get_available_images.run(as_dict=True)
 		if not available_images:
 			return None
 		return available_images[0].name
+
+	def get_root_volume(self):
+		# This only works for AWS
+		if len(self.volumes) == 1:
+			return self.volumes[0]
+
+		volume = find(self.volumes, lambda v: v.device == "/dev/sda1")
+		if volume:
+			return volume
+		return frappe._dict({"size": 0})
+
+	def get_data_volume(self):
+		if not self.has_data_volume:
+			return self.get_root_volume()
+
+		# This only works for AWS
+		if len(self.volumes) == 1:
+			return self.volumes[0]
+
+		volume = find(self.volumes, lambda v: v.device != "/dev/sda1")
+		if volume:
+			return volume
+		return frappe._dict({"size": 0})

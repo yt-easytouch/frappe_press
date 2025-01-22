@@ -2,11 +2,11 @@
 # See license.txt
 
 import datetime
+import unittest
 from unittest.mock import MagicMock, Mock, call, patch
 
 import frappe
 import responses
-from frappe.tests.utils import FrappeTestCase
 
 from press.api.site import all
 from press.press.doctype.agent_job.agent_job import AgentJob, poll_pending_jobs
@@ -34,7 +34,7 @@ from press.press.doctype.site_plan.test_site_plan import create_test_plan
 from press.press.doctype.team.test_team import create_test_press_admin_team
 
 
-class TestAPISite(FrappeTestCase):
+class TestAPISite(unittest.TestCase):
 	def setUp(self):
 		self.team = create_test_press_admin_team()
 		self.team.allocate_credit_amount(1000, source="Prepaid Credits", remark="Test")
@@ -76,8 +76,10 @@ class TestAPISite(FrappeTestCase):
 		from press.api.site import new
 
 		app = create_test_app()
-		group = create_test_release_group([app])
-		bench = create_test_bench(group=group)
+		cluster = create_test_cluster("Default", public=True)
+		server = create_test_server(cluster=cluster.name, public=True)
+		group = create_test_release_group([app], servers=[server.name])
+		bench = create_test_bench(group=group, server=server.name)
 		plan = create_test_plan("Site")
 
 		frappe.set_user(self.team.user)
@@ -697,7 +699,7 @@ erpnext 0.8.3	    HEAD
 		self.assertEqual(site.apps[1].app, "erpnext")
 		self.assertEqual(site.status, "Active")
 
-	def test_site_change_group(self):
+	def test_change_group_changes_group_and_bench_of_site(self):
 		from press.api.site import change_group, change_group_options
 		from press.press.doctype.site_update.site_update import process_update_site_job_update
 
@@ -707,7 +709,9 @@ erpnext 0.8.3	    HEAD
 		group2 = create_test_release_group([app])
 		bench1 = create_test_bench(group=group1, server=server)
 		bench2 = create_test_bench(group=group2, server=server)
-		site = create_test_site(bench=bench1.name)
+		site = create_test_site(
+			bench=bench1.name, team=self.team, plan=create_test_plan("Site", private_benches=True).name
+		)
 
 		self.assertEqual(change_group_options(site.name), [{"name": group2.name, "title": group2.title}])
 
@@ -790,7 +794,7 @@ erpnext 0.8.3	    HEAD
 		site.reload()
 		self.assertEqual(site.cluster, seoul_server.cluster)
 
-	def test_site_version_upgrade(self):
+	def test_version_upgrade_api_upgrades_site(self):
 		from press.api.site import get_private_groups_for_upgrade, version_upgrade
 		from press.press.doctype.site_update.site_update import process_update_site_job_update
 
@@ -919,7 +923,7 @@ erpnext 0.8.3	    HEAD
 		pass
 
 
-class TestAPISiteList(FrappeTestCase):
+class TestAPISiteList(unittest.TestCase):
 	def setUp(self):
 		from press.press.doctype.press_tag.test_press_tag import create_and_add_test_tag
 		from press.press.doctype.site.test_site import create_test_site

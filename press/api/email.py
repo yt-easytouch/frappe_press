@@ -27,6 +27,10 @@ class EmailConfigError(ValidationError):
 	http_status_code = 400
 
 
+class SpamDetectionError(ValidationError):
+	http_status_code = 422
+
+
 @frappe.whitelist(allow_guest=True)
 def email_ping():
 	return "pong"
@@ -113,7 +117,7 @@ def validate_plan(secret_key):
 		frappe.throw(
 			str(e)
 			or "Something went wrong fetching subscription details of Email Delivery Service. Please raise a ticket at support.frappe.io",
-			e,
+			type(e),
 		)
 
 	if not subscription["enabled"]:
@@ -141,20 +145,23 @@ def validate_plan(secret_key):
 		)
 
 
-def check_spam(message: str):
-	resp = requests.post(
-		"https://frappemail.com/spamd/score",
-		{"message": message},
-	)
-	if resp.status_code == 200:
+def check_spam(message: bytes):
+	try:
+		resp = requests.post(
+			"https://server.frappemail.com/spamd/score",
+			files={"message": message},
+		)
+		resp.raise_for_status()
 		data = resp.json()
 		if data["message"] > 3.5:
 			frappe.throw(
 				"This email was blocked as it was flagged as spam by our system. Please review the contents and try again.",
-				EmailSendError,
+				SpamDetectionError,
 			)
-	else:
-		log_error("Spam Detection: Error", data=resp.text, message=message)
+	except requests.exceptions.HTTPError as e:
+		# Ignore error, if server.frappemail.com is being updated.
+		if e.response.status_code != 503:
+			log_error("Spam Detection : Error", data=e)
 
 
 @frappe.whitelist(allow_guest=True)
@@ -169,8 +176,8 @@ def send_mime_mail(**data):
 
 	api_key, domain = frappe.db.get_value("Press Settings", None, ["mailgun_api_key", "root_domain"])
 
-	message = files["mime"].read()
-	check_spam(message.decode("utf-8"))
+	message: bytes = files["mime"].read()
+	check_spam(message)
 
 	resp = requests.post(
 		f"https://api.mailgun.net/v3/{domain}/messages.mime",

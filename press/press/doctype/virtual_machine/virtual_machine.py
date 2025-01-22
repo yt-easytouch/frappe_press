@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import base64
 import ipaddress
+import time
 
 import boto3
+import botocore
 import frappe
 import rq
 from frappe.core.utils import find
@@ -61,6 +63,7 @@ class VirtualMachine(Document):
 		cluster: DF.Link
 		disk_size: DF.Int
 		domain: DF.Link
+		has_data_volume: DF.Check
 		index: DF.Int
 		instance_id: DF.Data | None
 		machine_image: DF.Data | None
@@ -72,6 +75,7 @@ class VirtualMachine(Document):
 		public_ip_address: DF.Data | None
 		ram: DF.Int
 		region: DF.Link
+		root_disk_size: DF.Int
 		security_group_id: DF.Data | None
 		series: DF.Literal["n", "f", "m", "c", "p", "e", "r"]
 		ssh_key: DF.Link
@@ -90,17 +94,25 @@ class VirtualMachine(Document):
 		self.index = int(make_autoname(series)[-5:])
 		self.name = f"{self.series}{self.index}-{slug(self.cluster)}.{self.domain}"
 
-	def validate(self):
+	def after_insert(self):
 		if self.virtual_machine_image:
-			self.disk_size = max(
-				self.disk_size,
-				frappe.db.get_value("Virtual Machine Image", self.virtual_machine_image, "size"),
-			)
-			self.machine_image = frappe.db.get_value(
-				"Virtual Machine Image", self.virtual_machine_image, "image_id"
-			)
+			image = frappe.get_doc("Virtual Machine Image", self.virtual_machine_image)
+			if image.has_data_volume:
+				# We have two separate volumes for root and data
+				# Copy their sizes correctly
+				self.disk_size = max(self.disk_size, image.size)
+				self.root_disk_size = max(self.root_disk_size, image.root_size)
+			else:
+				# We have only one volume. Both root and data are the same
+				self.disk_size = max(self.disk_size, image.size)
+				self.root_disk_size = self.disk_size
+			self.machine_image = image.image_id
+			self.has_data_volume = image.has_data_volume
 		if not self.machine_image:
 			self.machine_image = self.get_latest_ubuntu_image()
+		self.save()
+
+	def validate(self):
 		if not self.private_ip_address:
 			ip = ipaddress.IPv4Interface(self.subnet_cidr_block).ip
 			index = self.index + 356
@@ -126,6 +138,13 @@ class VirtualMachine(Document):
 		)
 		for image in images:
 			frappe.delete_doc("Virtual Machine Image", image)
+
+	def on_update(self):
+		if self.has_value_changed("has_data_volume"):
+			server = self.get_server()
+			if server:
+				server.has_data_volume = self.has_data_volume
+				server.save()
 
 	@frappe.whitelist()
 	def provision(self):
@@ -168,7 +187,22 @@ class VirtualMachine(Document):
 
 	def _provision_aws(self):
 		additional_volumes = []
-		for index, volume in enumerate(self.volumes):
+		if self.virtual_machine_image:
+			image = frappe.get_doc("Virtual Machine Image", self.virtual_machine_image)
+			if image.has_data_volume:
+				volume = image.get_data_volume()
+				additional_volumes.append(
+					{
+						"DeviceName": volume.device,
+						"Ebs": {
+							"DeleteOnTermination": True,
+							"VolumeSize": max(self.disk_size, volume.size),
+							"VolumeType": volume.volume_type,
+						},
+					}
+				)
+
+		for index, volume in enumerate(self.volumes, start=len(additional_volumes)):
 			device_name_index = chr(ord("f") + index)
 			additional_volumes.append(
 				{
@@ -188,7 +222,7 @@ class VirtualMachine(Document):
 						"DeviceName": "/dev/sda1",
 						"Ebs": {
 							"DeleteOnTermination": True,
-							"VolumeSize": self.disk_size,  # This in GB. Fucking AWS!
+							"VolumeSize": self.root_disk_size,  # This in GB. Fucking AWS!
 							"VolumeType": "gp3",
 						},
 					}
@@ -254,7 +288,7 @@ class VirtualMachine(Document):
 					instance_options=InstanceOptions(are_legacy_imds_endpoints_disabled=True),
 					source_details=InstanceSourceViaImageDetails(
 						image_id=self.machine_image,
-						boot_volume_size_in_gbs=max(self.disk_size, 50),
+						boot_volume_size_in_gbs=max(self.root_disk_size, 50),
 						boot_volume_vpus_per_gb=30,
 					),
 					shape="VM.Standard.E4.Flex",
@@ -283,6 +317,8 @@ class VirtualMachine(Document):
 
 	def get_cloud_init(self):
 		server = self.get_server()
+		if not server:
+			return ""
 		log_server, kibana_password = server.get_log_server()
 		cloud_init_template = "press/press/doctype/virtual_machine/cloud-init.yml.jinja2"
 		context = {
@@ -327,8 +363,18 @@ class VirtualMachine(Document):
 						mariadb_context,
 						is_path=True,
 					),
+					"mariadb_root_config": frappe.render_template(
+						"press/playbooks/roles/mariadb/templates/my.cnf",
+						mariadb_context,
+						is_path=True,
+					),
 					"mariadb_exporter_config": frappe.render_template(
 						"press/playbooks/roles/mysqld_exporter/templates/mysqld_exporter.service",
+						mariadb_context,
+						is_path=True,
+					),
+					"deadlock_logger_config": frappe.render_template(
+						"press/playbooks/roles/deadlock_logger/templates/deadlock_logger.service",
 						mariadb_context,
 						is_path=True,
 					),
@@ -409,12 +455,16 @@ class VirtualMachine(Document):
 		self.sync()
 
 	@frappe.whitelist()
-	def increase_disk_size(self, increment=50):
+	def increase_disk_size(self, volume_id=None, increment=50):
 		if not increment:
 			return
-		volume = self.volumes[0]
+		if not volume_id:
+			volume_id = self.volumes[0].volume_id
+
+		volume = find(self.volumes, lambda v: v.volume_id == volume_id)
 		volume.size += int(increment)
-		self.disk_size = volume.size
+		self.disk_size = self.get_data_volume().size
+		self.root_disk_size = self.get_root_volume().size
 		volume.last_updated_at = frappe.utils.now_datetime()
 		if self.cloud_provider == "AWS EC2":
 			self.client().modify_volume(VolumeId=volume.volume_id, Size=volume.size)
@@ -564,7 +614,8 @@ class VirtualMachine(Document):
 						volume=volume,
 					)
 			if self.volumes:
-				self.disk_size = self.volumes[0].size
+				self.disk_size = self.get_data_volume().size
+				self.root_disk_size = self.get_root_volume().size
 
 			for volume in list(self.volumes):
 				if volume.volume_id not in available_volumes:
@@ -577,7 +628,11 @@ class VirtualMachine(Document):
 
 	def _sync_aws(self, response=None):  # noqa: C901
 		if not response:
-			response = self.client().describe_instances(InstanceIds=[self.instance_id])
+			try:
+				response = self.client().describe_instances(InstanceIds=[self.instance_id])
+			except botocore.exceptions.ClientError as e:
+				if e.response.get("Error", {}).get("Code") == "InvalidInstanceID.NotFound":
+					response = {"Reservations": []}
 		if response["Reservations"]:
 			instance = response["Reservations"][0]["Instances"][0]
 
@@ -592,7 +647,7 @@ class VirtualMachine(Document):
 			self.platform = instance.get("Architecture", "x86_64")
 
 			attached_volumes = []
-			for volume in self.get_volumes():
+			for volume_index, volume in enumerate(self.get_volumes(), start=1):  # idx starts from 1
 				existing_volume = find(self.volumes, lambda v: v.volume_id == volume["VolumeId"])
 				if existing_volume:
 					row = existing_volume
@@ -608,10 +663,12 @@ class VirtualMachine(Document):
 				if "Throughput" in volume:
 					row.throughput = volume["Throughput"]
 
+				row.idx = volume_index
 				if not existing_volume:
 					self.append("volumes", row)
 
-			self.disk_size = self.volumes[0].size if self.volumes else self.disk_size
+			self.disk_size = self.get_data_volume().size
+			self.root_disk_size = self.get_root_volume().size
 
 			for volume in list(self.volumes):
 				if volume.volume_id not in attached_volumes:
@@ -629,6 +686,37 @@ class VirtualMachine(Document):
 		self.save()
 		self.update_servers()
 
+	def get_root_volume(self):
+		if len(self.volumes) == 1:
+			return self.volumes[0]
+
+		ROOT_VOLUME_FILTERS = {
+			"AWS EC2": lambda v: v.device == "/dev/sda1",
+			"OCI": lambda v: ".bootvolume." in v.volume_id,
+		}
+		root_volume_filter = ROOT_VOLUME_FILTERS.get(self.cloud_provider)
+		volume = find(self.volumes, root_volume_filter)
+		if volume:  # Un-provisioned machines might not have any volumes
+			return volume
+		return frappe._dict({"size": 0})
+
+	def get_data_volume(self):
+		if not self.has_data_volume:
+			return self.get_root_volume()
+
+		if len(self.volumes) == 1:
+			return self.volumes[0]
+
+		DATA_VOLUME_FILTERS = {
+			"AWS EC2": lambda v: v.device != "/dev/sda1",
+			"OCI": lambda v: ".bootvolume." not in v.volume_id,
+		}
+		data_volume_filter = DATA_VOLUME_FILTERS.get(self.cloud_provider)
+		volume = find(self.volumes, data_volume_filter)
+		if volume:  # Un-provisioned machines might not have any volumes
+			return volume
+		return frappe._dict({"size": 0})
+
 	def update_servers(self):
 		status_map = {
 			"Pending": "Pending",
@@ -643,7 +731,7 @@ class VirtualMachine(Document):
 				frappe.db.set_value(doctype, server, "ip", self.public_ip_address)
 				if doctype in ["Server", "Database Server"]:
 					frappe.db.set_value(doctype, server, "ram", self.ram)
-				if self.public_ip_address:
+				if self.public_ip_address and self.has_value_changed("public_ip_address"):
 					frappe.get_doc(doctype, server).create_dns_record()
 				frappe.db.set_value(doctype, server, "status", status_map[self.status])
 
@@ -657,8 +745,15 @@ class VirtualMachine(Document):
 			)
 
 	@frappe.whitelist()
-	def create_image(self):
-		image = frappe.get_doc({"doctype": "Virtual Machine Image", "virtual_machine": self.name}).insert()
+	def create_image(self, public=True):
+		image = frappe.get_doc(
+			{
+				"doctype": "Virtual Machine Image",
+				"virtual_machine": self.name,
+				"public": public,
+				"has_data_volume": self.has_data_volume,
+			}
+		).insert()
 		return image.name
 
 	@frappe.whitelist()
@@ -759,12 +854,26 @@ class VirtualMachine(Document):
 		self.sync()
 
 	@frappe.whitelist()
-	def stop(self):
+	def stop(self, force=False):
 		if self.cloud_provider == "AWS EC2":
-			self.client().stop_instances(InstanceIds=[self.instance_id])
+			self.client().stop_instances(InstanceIds=[self.instance_id], Force=bool(force))
 		elif self.cloud_provider == "OCI":
 			self.client().instance_action(instance_id=self.instance_id, action="STOP")
 		self.sync()
+
+	@frappe.whitelist()
+	def force_stop(self):
+		self.stop(force=True)
+
+	@frappe.whitelist()
+	def force_terminate(self):
+		if not frappe.conf.developer_mode:
+			return
+		if self.cloud_provider == "AWS EC2":
+			self.client().modify_instance_attribute(
+				InstanceId=self.instance_id, DisableApiTermination={"Value": False}
+			)
+			self.client().terminate_instances(InstanceIds=[self.instance_id])
 
 	@frappe.whitelist()
 	def terminate(self):
@@ -995,7 +1104,7 @@ class VirtualMachine(Document):
 	def bulk_sync_aws(cls):
 		for cluster in frappe.get_all(
 			"Virtual Machine",
-			["cluster", "max(`index`) as max_index"],
+			["cluster", "cloud_provider", "max(`index`) as max_index"],
 			{
 				"status": ("not in", ("Terminated", "Draft")),
 				"cloud_provider": "AWS EC2",
@@ -1010,7 +1119,9 @@ class VirtualMachine(Document):
 			for start, end in chunks:
 				# Pick a random machine
 				# TODO: This probably should be a method on the Cluster
-				machines = cls._get_active_aws_machines_within_chunk_range(cluster.cluster, start, end)
+				machines = cls._get_active_machines_within_chunk_range(
+					cluster.cloud_provider, cluster.cluster, start, end
+				)
 				if not machines:
 					# There might not be any running machines in the chunk range
 					continue
@@ -1028,7 +1139,9 @@ class VirtualMachine(Document):
 
 	def bulk_sync_aws_cluster(self, start, end):
 		client = self.client()
-		machines = self.__class__._get_active_aws_machines_within_chunk_range(self.cluster, start, end)
+		machines = self.__class__._get_active_machines_within_chunk_range(
+			self.cloud_provider, self.cluster, start, end
+		)
 		instance_ids = [machine.instance_id for machine in machines]
 		response = client.describe_instances(Filters=[{"Name": "instance-id", "Values": instance_ids}])
 		for reservation in response["Reservations"]:
@@ -1044,13 +1157,13 @@ class VirtualMachine(Document):
 					frappe.db.rollback()
 
 	@classmethod
-	def _get_active_aws_machines_within_chunk_range(cls, cluster, start, end):
+	def _get_active_machines_within_chunk_range(cls, provider, cluster, start, end):
 		return frappe.get_all(
 			"Virtual Machine",
 			fields=["name", "instance_id"],
 			filters=[
 				["status", "not in", ("Terminated", "Draft")],
-				["cloud_provider", "=", "AWS EC2"],
+				["cloud_provider", "=", provider],
 				["cluster", "=", cluster],
 				["instance_id", "is", "set"],
 				["index", ">=", start],
@@ -1062,34 +1175,49 @@ class VirtualMachine(Document):
 	def bulk_sync_oci(cls):
 		for cluster in frappe.get_all(
 			"Virtual Machine",
-			["cluster"],
-			{"status": ("not in", ("Terminated", "Draft")), "cloud_provider": "OCI"},
+			["cluster", "cloud_provider", "max(`index`) as max_index"],
+			{
+				"status": ("not in", ("Terminated", "Draft")),
+				"cloud_provider": "OCI",
+			},
 			group_by="cluster",
-			pluck="cluster",
 		):
-			# Pick a random machine
-			# TODO: This probably should be a method on the Cluster
-			machine = frappe.get_doc(
-				"Virtual Machine",
-				{
-					"status": ("not in", ("Terminated", "Draft")),
-					"cloud_provider": "OCI",
-					"cluster": cluster,
-				},
-			)
-			frappe.enqueue_doc(
-				machine.doctype,
-				machine.name,
-				method="bulk_sync_oci_cluster",
-				queue="sync",
-				job_id=f"bulk_sync_oci:{machine.cluster}",
-				deduplicate=True,
-			)
+			CHUNK_SIZE = 15  # Each call will pick up ~30 machines (2 x CHUNK_SIZE)
+			# Generate closed bounds for 15 indexes at a time
+			# (1, 15), (16, 30), (31, 45), ...
+			# We might have uneven chunks because of missing indexes
+			chunks = [(ii, ii + CHUNK_SIZE - 1) for ii in range(1, cluster.max_index, CHUNK_SIZE)]
+			for start, end in chunks:
+				# Pick a random machine
+				# TODO: This probably should be a method on the Cluster
+				machines = cls._get_active_machines_within_chunk_range(
+					cluster.cloud_provider, cluster.cluster, start, end
+				)
+				if not machines:
+					# There might not be any running machines in the chunk range
+					continue
 
-	def bulk_sync_oci_cluster(self):
+				frappe.enqueue_doc(
+					"Virtual Machine",
+					machines[0].name,
+					method="bulk_sync_oci_cluster",
+					start=start,
+					end=end,
+					queue="sync",
+					job_id=f"bulk_sync_oci:{cluster.cluster}:{start}-{end}",
+					deduplicate=True,
+				)
+
+	def bulk_sync_oci_cluster(self, start, end):
 		cluster = frappe.get_doc("Cluster", self.cluster)
+		machines = self.__class__._get_active_machines_within_chunk_range(
+			self.cloud_provider, self.cluster, start, end
+		)
+		instance_ids = set([machine.instance_id for machine in machines])
 		response = self.client().list_instances(compartment_id=cluster.oci_tenancy).data
 		for instance in response:
+			if instance.id not in instance_ids:
+				continue
 			machine: VirtualMachine = frappe.get_doc("Virtual Machine", {"instance_id": instance.id})
 			if has_job_timeout_exceeded():
 				return
@@ -1126,6 +1254,48 @@ class VirtualMachine(Document):
 			virtual_machine_image=virtual_machine_image,
 			machine_type=machine_type,
 		).insert()
+
+	@frappe.whitelist()
+	def attach_new_volume(self, size):
+		if self.cloud_provider != "AWS EC2":
+			return
+		volume_id = self.client().create_volume(
+			AvailabilityZone=self.availability_zone,
+			Size=size,
+			VolumeType="gp3",
+			TagSpecifications=[
+				{
+					"ResourceType": "volume",
+					"Tags": [{"Key": "Name", "Value": f"Frappe Cloud - {self.name}"}],
+				},
+			],
+		)["VolumeId"]
+		# Wait for the volume to be available
+		while (
+			self.client().describe_volumes(
+				VolumeIds=[
+					volume_id,
+				],
+			)["Volumes"][0]["State"]
+			!= "available"
+		):
+			time.sleep(1)
+		# First volume starts from /dev/sdf
+		device_name_index = chr(ord("f") + len(self.volumes) - 1)
+		self.client().attach_volume(
+			Device=f"/dev/sd{device_name_index}",
+			InstanceId=self.instance_id,
+			VolumeId=volume_id,
+		)
+		self.sync()
+
+	@frappe.whitelist()
+	def detach(self, volume_id):
+		volume = find(self.volumes, lambda v: v.volume_id == volume_id)
+		self.client().detach_volume(
+			Device=volume.device, InstanceId=self.instance_id, VolumeId=volume.volume_id
+		)
+		self.sync()
 
 
 get_permission_query_conditions = get_permission_query_conditions_for_doctype("Virtual Machine")

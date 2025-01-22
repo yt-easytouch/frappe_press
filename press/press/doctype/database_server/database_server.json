@@ -54,6 +54,9 @@
   "column_break_apox",
   "tags_section",
   "tags",
+  "mounts_section",
+  "has_data_volume",
+  "mounts",
   "mariadb_settings_tab",
   "memory_limits_section",
   "memory_high",
@@ -487,7 +490,7 @@
    "label": "Public"
   },
   {
-   "default": "System",
+   "default": "TCMalloc",
    "fieldname": "memory_allocator",
    "fieldtype": "Select",
    "label": "Memory Allocator",
@@ -516,11 +519,30 @@
    "fieldtype": "Int",
    "label": "Auto Add Storage Max",
    "non_negative": 1
+  },
+  {
+   "fieldname": "mounts_section",
+   "fieldtype": "Section Break",
+   "label": "Mounts"
+  },
+  {
+   "fieldname": "mounts",
+   "fieldtype": "Table",
+   "label": "Mounts",
+   "options": "Server Mount"
+  },
+  {
+   "default": "0",
+   "fetch_from": "virtual_machine.has_data_volume",
+   "fieldname": "has_data_volume",
+   "fieldtype": "Check",
+   "label": "Has Data Volume",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2024-08-13 11:02:07.399141",
+ "modified": "2025-01-02 16:51:08.113931",
  "modified_by": "Administrator",
  "module": "Press",
  "name": "Database Server",

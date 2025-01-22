@@ -12,9 +12,11 @@ from frappe.model.document import Document
 from press.agent import Agent
 from press.exceptions import (
 	CannotChangePlan,
+	InactiveDomains,
 	InsufficientSpaceOnServer,
 	MissingAppsInBench,
 	OngoingAgentJob,
+	SiteAlreadyArchived,
 )
 from press.press.doctype.press_notification.press_notification import (
 	create_new_notification,
@@ -27,12 +29,14 @@ from press.utils import log_error
 from press.utils.dns import create_dns_record
 
 if TYPE_CHECKING:
+	from frappe.types.DF import Link
+
 	from press.press.doctype.agent_job.agent_job import AgentJob
 	from press.press.doctype.server.server import Server
 	from press.press.doctype.site.site import Site
 
 
-def get_ongoing_migration(site: str, scheduled=False):
+def get_ongoing_migration(site: Link, scheduled=False):
 	"""
 	Return ongoing Site Migration for site.
 
@@ -53,9 +57,7 @@ class SiteMigration(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
-		from press.press.doctype.site_migration_step.site_migration_step import (
-			SiteMigrationStep,
-		)
+		from press.press.doctype.site_migration_step.site_migration_step import SiteMigrationStep
 
 		backup: DF.Link | None
 		destination_bench: DF.Link
@@ -75,6 +77,7 @@ class SiteMigration(Document):
 	def before_insert(self):
 		self.validate_apps()
 		self.validate_bench()
+		self.check_for_inactive_domains()
 		self.check_enough_space_on_destination_server()
 		if get_ongoing_migration(self.site, scheduled=True):
 			frappe.throw(f"Ongoing/Scheduled Site Migration for the site {frappe.bold(self.site)} exists.")
@@ -122,15 +125,30 @@ class SiteMigration(Document):
 				MissingAppsInBench,
 			)
 
+	def check_for_inactive_domains(self):
+		if domains := frappe.db.get_all(
+			"Site Domain", {"site": self.site, "status": ("!=", "Active")}, pluck="name"
+		):
+			frappe.throw(
+				f"Inactive custom domains exist: {','.join(domains)}. Please remove or fix the same.",
+				InactiveDomains,
+			)
+
 	@frappe.whitelist()
 	def start(self):
 		self.status = "Pending"
 		self.save()
 		self.check_for_ongoing_agent_jobs()
+		self.check_for_inactive_domains()
 		self.validate_apps()
 		self.check_enough_space_on_destination_server()
 		site: Site = frappe.get_doc("Site", self.site)
-		site.ready_for_move()
+		try:
+			site.ready_for_move()
+		except SiteAlreadyArchived:
+			self.status = "Failure"
+			self.save()
+			return
 		self.run_next_step()
 
 	@frappe.whitelist()
@@ -254,7 +272,7 @@ class SiteMigration(Document):
 			self._add_setup_redirects_step()
 
 	@property
-	def next_step(self):
+	def next_step(self) -> SiteMigrationStep | None:
 		"""Get next step to execute or update."""
 		return find(self.steps, lambda step: step.status in ["Pending", "Running"])
 
@@ -301,23 +319,32 @@ class SiteMigration(Document):
 			lambda x: x.method_name == self.restore_site_on_destination_server.__name__,
 		).status in ["Success", "Failure"]
 
-	def fail(self, cleanup=True, reason=None, activate=False):
+	def cleanup_if_appropriate(self):
 		self.set_pending_steps_to_skipped()
-		if cleanup and not self.possibly_archived_site_on_source and self.restore_on_destination_happened:
-			self.append(
-				"steps",
-				{
-					"step_title": self.archive_site_on_destination_server.__doc__,
-					"method_name": self.archive_site_on_destination_server.__name__,
-					"status": "Pending",
-				},
-			)
-			self.run_next_step()
-			return
+		if self.possibly_archived_site_on_source or not self.restore_on_destination_happened:
+			return False
+		self.append(
+			"steps",
+			{
+				"step_title": self.archive_site_on_destination_server.__doc__,
+				"method_name": self.archive_site_on_destination_server.__name__,
+				"status": "Pending",
+			},
+		)
+		self.run_next_step()
+		return True
+
+	@frappe.whitelist()
+	def cleanup_and_fail(self, *args, **kwargs):
+		if self.cleanup_if_appropriate():
+			return  # callback will trigger fail
+		self.fail(*args, **kwargs)
+
+	def fail(self, reason: str | None = None, force_activate: bool = False):
 		self.status = "Failure"
 		self.save()
 		self.send_fail_notification(reason)
-		self.activate_site_if_appropriate(force=activate)
+		self.activate_site_if_appropriate(force=force_activate)
 
 	@property
 	def failed_step(self):
@@ -326,9 +353,8 @@ class SiteMigration(Document):
 	def activate_site_if_appropriate(self, force=False):
 		site: "Site" = frappe.get_doc("Site", self.site)
 		failed_step_method_name = (self.failed_step or {}).get("method_name", "__NOT_SET__")
-		if (
-			force
-			or failed_step_method_name
+		if force or (
+			failed_step_method_name
 			in [
 				self.backup_source_site.__name__,
 				self.restore_site_on_destination_server.__name__,
@@ -341,22 +367,26 @@ class SiteMigration(Document):
 				site.create_dns_record()
 
 	def send_fail_notification(self, reason: str | None = None):
-		site = frappe.get_doc("Site", self.site)
+		from press.press.doctype.agent_job.agent_job_notifications import create_job_failed_notification
 
+		site = frappe.get_doc("Site", self.site)
 		message = f"Site Migration ({self.migration_type}) for site <b>{site.host_name}</b> failed"
 		if reason:
 			message += f" due to {reason}"
 			agent_job_id = None
+
+			create_new_notification(
+				site.team,
+				"Site Migrate",
+				"Agent Job",
+				agent_job_id,
+				message,
+			)
 		else:
 			agent_job_id = find(self.steps, lambda x: x.status == "Failure").get("step_job")
 
-		create_new_notification(
-			site.team,
-			"Site Migrate",
-			"Agent Job",
-			agent_job_id,
-			message,
-		)
+			job = frappe.get_doc("Agent Job", agent_job_id)
+			create_job_failed_notification(job, site.team, "Site Migrate", "Site Migrate", message)
 
 	def succeed(self):
 		self.status = "Success"
@@ -600,7 +630,7 @@ class SiteMigration(Document):
 		return None
 
 	def adjust_plan_if_required(self):
-		"""Change Plan to Unlimited if Migrated to Dedicated Server"""
+		"""Update site plan from/to Unlimited"""
 		site: "Site" = frappe.get_doc("Site", self.site)
 		dest_server: Server = frappe.get_doc("Server", self.destination_server)
 		plan_change = None
@@ -627,12 +657,13 @@ def process_required_job_callbacks(job):
 
 
 def job_matches_site_migration(job, site_migration_name: str):
-	site_migration: SiteMigration = frappe.get_doc("Site Migration", site_migration_name)
-	return job.name == site_migration.next_step.step_job
+	site_migration = SiteMigration("Site Migration", site_migration_name)
+	next = site_migration.next_step
+	return job.name == next.step_job if next else False
 
 
 def process_site_migration_job_update(job, site_migration_name: str):
-	site_migration: SiteMigration = frappe.get_doc("Site Migration", site_migration_name)
+	site_migration = SiteMigration("Site Migration", site_migration_name)
 	if job.name != site_migration.next_step.step_job:
 		log_error("Extra Job found during Site Migration", job=job.as_dict())
 		return
@@ -641,7 +672,7 @@ def process_site_migration_job_update(job, site_migration_name: str):
 	site_migration.update_next_step_status(job.status)
 
 	if site_migration.is_cleanup_done(job):
-		site_migration.fail(cleanup=False)
+		site_migration.fail()
 		return
 
 	if job.status == "Success":
@@ -649,9 +680,9 @@ def process_site_migration_job_update(job, site_migration_name: str):
 			site_migration.run_next_step()
 		except Exception as e:
 			log_error("Site Migration Step Error", doc=site_migration)
-			site_migration.fail(reason=str(e), activate=True)
+			site_migration.cleanup_and_fail(reason=str(e), force_activate=True)
 	elif job.status in ["Failure", "Delivery Failure"]:
-		site_migration.fail()
+		site_migration.cleanup_and_fail()
 
 
 def run_scheduled_migrations():
@@ -660,17 +691,19 @@ def run_scheduled_migrations():
 		{"scheduled_time": ("<=", frappe.utils.now()), "status": "Scheduled"},
 	)
 	for migration in migrations:
-		site_migration: SiteMigration = frappe.get_doc("Site Migration", migration)
+		site_migration = SiteMigration("Site Migration", migration)
 		try:
 			site_migration.start()
 		except OngoingAgentJob:
-			pass
+			pass  # ongoing jobs will finish in some time
 		except MissingAppsInBench as e:
-			site_migration.fail(reason=str(e), activate=True)
+			site_migration.cleanup_and_fail(reason=str(e), force_activate=True)
 		except InsufficientSpaceOnServer as e:
-			site_migration.fail(reason=str(e), activate=True)
+			site_migration.cleanup_and_fail(reason=str(e), force_activate=True)
+		except InactiveDomains as e:
+			site_migration.cleanup_and_fail(reason=str(e), force_activate=True)
 		except Exception as e:
-			log_error("Site Migration Start Error", e)
+			log_error("Site Migration Start Error", exception=e)
 
 
 def on_doctype_update():

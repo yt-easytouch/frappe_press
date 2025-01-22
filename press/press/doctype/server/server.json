@@ -76,7 +76,10 @@
   "column_break_edyf",
   "is_standalone_setup",
   "tags_section",
-  "tags"
+  "tags",
+  "mounts_section",
+  "has_data_volume",
+  "mounts"
  ],
  "fields": [
   {
@@ -444,7 +447,7 @@
    "fieldtype": "Column Break"
   },
   {
-   "default": "1",
+   "default": "0",
    "fieldname": "set_bench_memory_limits",
    "fieldtype": "Check",
    "label": "Set Bench Memory Limits"
@@ -523,10 +526,29 @@
    "fieldtype": "Int",
    "label": "Auto Add Storage Max",
    "non_negative": 1
+  },
+  {
+   "fieldname": "mounts_section",
+   "fieldtype": "Section Break",
+   "label": "Mounts"
+  },
+  {
+   "fieldname": "mounts",
+   "fieldtype": "Table",
+   "label": "Mounts",
+   "options": "Server Mount"
+  },
+  {
+   "default": "0",
+   "fetch_from": "virtual_machine.has_data_volume",
+   "fieldname": "has_data_volume",
+   "fieldtype": "Check",
+   "label": "Has Data Volume",
+   "read_only": 1
   }
  ],
  "links": [],
- "modified": "2024-09-24 12:56:06.423649",
+ "modified": "2025-01-02 16:52:55.927591",
  "modified_by": "Administrator",
  "module": "Press",
  "name": "Server",

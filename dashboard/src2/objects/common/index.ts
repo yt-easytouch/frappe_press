@@ -3,10 +3,9 @@ import { renderDialog } from '../../utils/components';
 import type {
 	BannerConfig,
 	ColumnField,
-	Resource,
+	DocumentResource,
 	Route,
-	Row,
-	Tab
+	Row
 } from './types';
 import { trialDays } from '../../utils/site';
 import { planTitle } from '../../utils/format';
@@ -27,8 +26,14 @@ export const clusterOptions = [
 	'Zurich'
 ];
 
-export function getUpsellBanner(site: Resource, title: string) {
-	if (site.doc.current_plan?.private_benches || !site.doc.group_public) return;
+export function getUpsellBanner(site: DocumentResource, title: string) {
+	if (
+		!site.doc.current_plan ||
+		site.doc.current_plan?.private_benches ||
+		site.doc.current_plan?.is_trial_plan ||
+		!site.doc.group_public
+	)
+		return;
 
 	return {
 		title: title,

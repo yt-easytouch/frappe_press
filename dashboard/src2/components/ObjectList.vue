@@ -441,14 +441,21 @@ export default {
 			//
 			// Note: this needs makeParams method in list resource to work
 			// In makeParams, return params if it exists so that old params won't overwrite the one we are setting
+			//
+			// If you provide `updateFilters` function to options, it will be called with the updated filters
+			// This is useful, when we are not using any standard resource and still want to update filters
 
-			if (this.options.resource) {
+			if (this.options.resource && !this.$list.filters) {
 				const params = {
 					...this.$list.params,
 					[control.fieldname]: control.value
 				};
 				this.$list.update({ params });
 				this.$list.reload();
+			} else if (this.options.updateFilters) {
+				this.options.updateFilters({
+					[control.fieldname]: control.value
+				});
 			} else {
 				let filters = { ...this.$list.filters };
 				for (let c of this.filterControls) {

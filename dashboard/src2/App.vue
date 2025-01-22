@@ -3,37 +3,17 @@
 		<div class="h-full flex-1">
 			<div class="flex h-full">
 				<div
-					v-if="!$isMobile && !isHideSidebar"
+					v-if="!isSaaSFlow && !$isMobile && !isHideSidebar"
 					class="relative block min-h-0 flex-shrink-0 overflow-hidden hover:overflow-auto"
 				>
-					<AppSidebar
-						v-if="
-							$session.user &&
-							$route.name != 'AppTrialSignup' &&
-							$route.name != 'AppTrialSetup' &&
-							!$route.name?.startsWith('IntegratedBilling')
-						"
-					/>
+					<AppSidebar v-if="$session.user" />
 				</div>
 				<div class="w-full overflow-auto" id="scrollContainer">
 					<MobileNav
-						v-if="
-							$isMobile &&
-							!isHideSidebar &&
-							$session.user &&
-							$route.name != 'AppTrialSignup' &&
-							$route.name != 'AppTrialSetup' &&
-							!$route.name?.startsWith('IntegratedBilling')
-						"
+						v-if="!isSaaSFlow && $isMobile && !isHideSidebar && $session.user"
 					/>
 					<div
-						v-if="
-							!$session.user &&
-							!$route.meta.isLoginPage &&
-							!$route.name?.startsWith('IntegratedBilling') &&
-							$route.name != 'AppTrialSignup' &&
-							$route.name != 'AppTrialSetup'
-						"
+						v-if="!isSaaSFlow && !$session.user && !$route.meta.isLoginPage"
 						class="border bg-red-200 px-5 py-3 text-base text-red-900"
 					>
 						You are not logged in.
@@ -50,7 +30,7 @@
 </template>
 
 <script setup>
-import { defineAsyncComponent, computed, watch } from 'vue';
+import { defineAsyncComponent, computed, watch, ref, provide } from 'vue';
 import { Toaster } from 'vue-sonner';
 import { dialogs } from './utils/components';
 import { useRoute } from 'vue-router';
@@ -65,14 +45,29 @@ const MobileNav = defineAsyncComponent(() =>
 );
 
 const route = useRoute();
+const team = getTeam();
 
 const isHideSidebar = computed(() => {
 	if (!session.user) return false;
-	const team = getTeam();
 	return (
-		route.name == 'Welcome' && session.user && team?.doc?.hide_sidebar === true
+		// using window.location.pathname as router is undefined initially
+		(window.location.pathname === '/dashboard/welcome' ||
+			route.name === 'Welcome') &&
+		session.user &&
+		team?.doc?.hide_sidebar === true
 	);
 });
+
+const isSaaSFlow = ref(window.location.pathname.startsWith('/dashboard/saas'));
+
+watch(
+	() => route.name,
+	() => {
+		isSaaSFlow.value = window.location.pathname.startsWith('/dashboard/saas');
+	}
+);
+
+provide('team', team);
 </script>
 
 <style src="../src/assets/style.css"></style>

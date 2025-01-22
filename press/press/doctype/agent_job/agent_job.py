@@ -14,6 +14,7 @@ import http.client
 import frappe
 from frappe.core.utils import find
 from frappe.model.document import Document
+from frappe.monitor import add_data_to_monitor
 from frappe.utils import (
 	add_days,
 	cint,
@@ -28,12 +29,13 @@ from press.api.client import is_owned_by_team
 from press.press.doctype.agent_job_type.agent_job_type import (
 	get_retryable_job_types_and_max_retry_count,
 )
+from press.press.doctype.site_database_user.site_database_user import SiteDatabaseUser
 from press.press.doctype.site_migration.site_migration import (
 	get_ongoing_migration,
 	job_matches_site_migration,
 	process_site_migration_job_update,
 )
-from press.utils import has_role, log_error
+from press.utils import has_role, log_error, timer
 
 AGENT_LOG_KEY = "agent-jobs"
 
@@ -309,6 +311,11 @@ class AgentJob(Document):
 	def process_job_updates(self):
 		process_job_updates(self.name)
 
+	@frappe.whitelist()
+	def cancel_job(self):
+		agent = Agent(self.server, server_type=self.server_type)
+		agent.cancel_job(self.job_id)
+
 	def on_trash(self):
 		steps = frappe.get_all("Agent Job Step", filters={"agent_job": self.name})
 		for step in steps:
@@ -330,6 +337,23 @@ class AgentJob(Document):
 			return statuses[0]
 
 		return None
+
+	@property
+	def failed_because_of_agent_update(self) -> bool:
+		if "BrokenPipeError" in str(self.traceback) and frappe.db.exists(
+			"Ansible Play",
+			{
+				"play": "Update Agent",
+				"server": self.server,
+				"creation": (">", frappe.utils.add_to_date(None, minutes=-15)),
+			},
+		):
+			return True
+		return False
+
+	@property
+	def on_public_server(self):
+		return bool(frappe.db.get_value(self.server_type, self.server, "public"))
 
 
 def job_detail(job):
@@ -430,6 +454,27 @@ def suspend_sites():
 			agent.reload_nginx()
 
 
+@timer
+def poll_random_jobs(agent, pending_ids):
+	random_pending_ids = random.sample(pending_ids, k=min(100, len(pending_ids)))
+	return agent.get_jobs_status(random_pending_ids)
+
+
+@timer
+def handle_polled_jobs(polled_jobs, pending_jobs):
+	for polled_job in polled_jobs:
+		if not polled_job:
+			continue
+		handle_polled_job(pending_jobs, polled_job)
+
+
+def add_timer_data_to_monitor(server):
+	if not hasattr(frappe.local, "timers"):
+		frappe.local.timers = {}
+
+	add_data_to_monitor(server=server, timing=frappe.local.timers)
+
+
 def poll_pending_jobs_server(server):
 	if frappe.db.get_value(server.server_type, server.server, "status") != "Active":
 		return
@@ -452,22 +497,21 @@ def poll_pending_jobs_server(server):
 
 	if not pending_jobs:
 		retry_undelivered_jobs(server)
+		add_timer_data_to_monitor(server.server)
 		return
 
 	pending_ids = [j.job_id for j in pending_jobs]
-	random_pending_ids = random.sample(pending_ids, k=min(100, len(pending_ids)))
-	polled_jobs = agent.get_jobs_status(random_pending_ids)
+	polled_jobs = poll_random_jobs(agent, pending_ids)
 
 	if not polled_jobs:
 		retry_undelivered_jobs(server)
+		add_timer_data_to_monitor(server.server)
 		return
 
-	for polled_job in polled_jobs:
-		if not polled_job:
-			continue
-		handle_polled_job(pending_jobs, polled_job)
+	handle_polled_jobs(polled_jobs, pending_jobs)
 
 	retry_undelivered_jobs(server)
+	add_timer_data_to_monitor(server.server)
 
 
 def handle_polled_job(pending_jobs, polled_job):
@@ -533,24 +577,53 @@ def populate_output_cache(polled_job, job):
 			frappe.cache.hset("agent_job_step_output", step.name, "\n".join(lines))
 
 
+def filter_active_servers(servers):
+	# Prepare list of all_active_servers for each server_type
+	# Return servers that are in all_active_servers
+	server_types = [server.server_type for server in servers]
+	all_active_servers = {}
+	for server_type in server_types:
+		all_active_servers[server_type] = set(frappe.get_all(server_type, {"status": "Active"}, pluck="name"))
+
+	active_servers = []
+	for server in servers:
+		if server.server in all_active_servers[server.server_type]:
+			active_servers.append(server)
+
+	return active_servers
+
+
+def filter_request_failures(servers):
+	request_failures = set(frappe.get_all("Agent Request Failure", pluck="server"))
+
+	alive_servers = []
+	for server in servers:
+		if server.server not in request_failures:
+			alive_servers.append(server)
+
+	return alive_servers
+
+
 def poll_pending_jobs():
-	conn = http.client.HTTPSConnection("webhook.site")
-	payload = ''
-	headers = {}
-	conn.request("GET", "/40041d03-c78a-4f78-9241-7c59b6c8556c?api=cron", payload, headers)
-	res = conn.getresponse()
-	data = res.read()
- 
+	filters = {"status": ("in", ["Pending", "Running", "Undelivered"])}
+	if random.random() > 0.1:
+		# Experimenting with fewer polls (only for backup jobs)
+		# Reduce poll frequency for Backup Site jobs
+		# TODO: Replace this with something deterministic
+		filters["job_type"] = ("!=", "Backup Site")
 	servers = frappe.get_all(
 		"Agent Job",
 		fields=["server", "server_type"],
-		filters={"status": ("in", ["Pending", "Running", "Undelivered"])},
+		filters=filters,
 		group_by="server",
 		order_by="",
 		ignore_ifnull=True,
 	)
 
-	for server in servers:
+	active_servers = filter_active_servers(servers)
+	alive_servers = filter_request_failures(active_servers)
+
+	for server in alive_servers:
 		frappe.enqueue(
 			"press.press.doctype.agent_job.agent_job.poll_pending_jobs_server",
 			queue="short",
@@ -750,6 +823,7 @@ def get_next_retry_at(job_retry_count):
 	return add_to_date(now_datetime(), seconds=retry_in_seconds)
 
 
+@timer
 def retry_undelivered_jobs(server):
 	"""Retry undelivered jobs and update job status if max retry count is reached"""
 
@@ -900,11 +974,11 @@ def update_job_ids_for_delivered_jobs(delivered_jobs):
 
 def process_job_updates(job_name: str, response_data: dict | None = None):  # noqa: C901
 	job: "AgentJob" = frappe.get_doc("Agent Job", job_name)
+	start = now_datetime()
 
 	try:
-		from press.api.dboptimize import (
-			delete_all_occurences_of_mariadb_analyze_query,
-			fetch_column_stats_update,
+		from press.press.doctype.agent_job.agent_job_notifications import (
+			send_job_failure_notification,
 		)
 		from press.press.doctype.app_patch.app_patch import AppPatch
 		from press.press.doctype.bench.bench import (
@@ -929,16 +1003,15 @@ def process_job_updates(job_name: str, response_data: dict | None = None):  # no
 			process_setup_erpnext_site_job_update,
 		)
 		from press.press.doctype.site.site import (
-			process_add_proxysql_user_job_update,
 			process_archive_site_job_update,
 			process_complete_setup_wizard_job_update,
 			process_create_user_job_update,
+			process_fetch_database_table_schema_job_update,
 			process_install_app_site_job_update,
 			process_migrate_site_job_update,
 			process_move_site_to_bench_job_update,
 			process_new_site_job_update,
 			process_reinstall_site_job_update,
-			process_remove_proxysql_user_job_update,
 			process_rename_site_job_update,
 			process_restore_job_update,
 			process_restore_tables_job_update,
@@ -1009,10 +1082,9 @@ def process_job_updates(job_name: str, response_data: dict | None = None):  # no
 			process_add_ssh_user_job_update(job)
 		elif job.job_type == "Remove User from Proxy":
 			process_remove_ssh_user_job_update(job)
-		elif job.job_type == "Add User to ProxySQL":
-			process_add_proxysql_user_job_update(job)
-		elif job.job_type == "Remove User from ProxySQL":
-			process_remove_proxysql_user_job_update(job)
+		elif job.job_type == "Add User to ProxySQL" or job.job_type == "Remove User from ProxySQL":
+			if job.reference_doctype == "Site Database User":
+				SiteDatabaseUser.process_job_update(job)
 		elif job.job_type == "Reload NGINX":
 			process_update_nginx_job_update(job)
 		elif job.job_type == "Move Site to Bench":
@@ -1021,30 +1093,28 @@ def process_job_updates(job_name: str, response_data: dict | None = None):  # no
 			AppPatch.process_patch_app(job)
 		elif job.job_type == "Run Remote Builder":
 			DeployCandidate.process_run_build(job, response_data)
-		elif job.job_type == "Column Statistics":
-			frappe.enqueue(
-				fetch_column_stats_update,
-				queue="default",
-				timeout=None,
-				is_async=True,
-				now=False,
-				job_name="Fetch Column Updates Through Enque",
-				enqueue_after_commit=False,
-				at_front=False,
-				job=job,
-				response_data=response_data,
-			)
 		elif job.job_type == "Create User":
 			process_create_user_job_update(job)
-		elif job.job_type == "Add Database Index":
-			delete_all_occurences_of_mariadb_analyze_query(job)
 		elif job.job_type == "Complete Setup Wizard":
 			process_complete_setup_wizard_job_update(job)
 		elif job.job_type == "Update Bench In Place":
 			Bench.process_update_inplace(job)
 		elif job.job_type == "Recover Update In Place":
 			Bench.process_recover_update_inplace(job)
+		elif job.job_type == "Fetch Database Table Schema":
+			process_fetch_database_table_schema_job_update(job)
+		elif job.job_type in [
+			"Create Database User",
+			"Remove Database User",
+			"Modify Database User Permissions",
+		]:
+			SiteDatabaseUser.process_job_update(job)
 
+		# send failure notification if job failed
+		if job.status == "Failure":
+			send_job_failure_notification(job)
+
+		log_update(job, start)
 	except Exception as e:
 		failure_count = job.callback_failure_count + 1
 		if failure_count in set([10, 100]) or failure_count % 1000 == 0:
@@ -1054,7 +1124,28 @@ def process_job_updates(job_name: str, response_data: dict | None = None):  # no
 				reference_doctype="Agent Job",
 				reference_name=job_name,
 			)
+		log_update(job, start, e)
 		raise AgentCallbackException from e
+
+
+def log_update(job, start, exception=None):
+	try:
+		data = {
+			"timestamp": start,
+			"duration": (now_datetime() - start).total_seconds(),
+			"name": job.name,
+			"job_type": job.job_type,
+			"status": job.status,
+			"server": job.server,
+			"site": job.site,
+			"bench": job.bench,
+		}
+		if exception:
+			data["exception"] = exception
+		serialized = json.dumps(data, sort_keys=True, default=str, separators=(",", ":"))
+		frappe.cache().rpush(AGENT_LOG_KEY, serialized)
+	except Exception:
+		traceback.print_exc()
 
 
 def update_job_step_status():
@@ -1093,6 +1184,7 @@ def update_job_step_status():
 
 def on_doctype_update():
 	frappe.db.add_index("Agent Job", ["status", "server"])
+	frappe.db.add_index("Agent Job", ["reference_doctype", "reference_name"])
 	# We don't need modified index, it's harmful on constantly updating tables
 	frappe.db.sql_ddl("drop index if exists modified on `tabAgent Job`")
 	frappe.db.add_index("Agent Job", ["creation"])

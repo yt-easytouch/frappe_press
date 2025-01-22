@@ -8,7 +8,7 @@
 	>
 		<template #body-content>
 			<ObjectList v-if="!showLog" :options="listOptions" />
-			<div v-else class="p-5">
+			<div v-else>
 				<div class="flex items-center">
 					<Button @click="showLog = false">
 						<template #icon>
@@ -16,11 +16,19 @@
 						</template>
 					</Button>
 					<h2 class="ml-4 text-lg font-medium text-gray-900">{{ logName }}</h2>
-					<Button class="!ml-auto" @click="log.reload()" :loading="log.loading">
-						<template #icon>
-							<i-lucide-refresh-ccw class="h-4 w-4" />
-						</template>
-					</Button>
+					<div class="!ml-auto flex gap-2">
+						<Button @click="log.reload()" :loading="log.loading">
+							<template #icon>
+								<i-lucide-refresh-ccw class="h-4 w-4" />
+							</template>
+						</Button>
+						<Button @click="navigateToLogBrowser">
+							<template #prefix>
+								<i-lucide-sparkle class="h-4 w-4" />
+							</template>
+							View in Log Browser
+						</Button>
+					</div>
 				</div>
 				<div class="mt-4">
 					<div
@@ -38,9 +46,11 @@
 
 <script setup>
 import { createResource } from 'frappe-ui';
-import { defineProps, ref } from 'vue';
+import { defineProps, h, ref } from 'vue';
+import LucideSparkleIcon from '~icons/lucide/sparkle';
 import ObjectList from '../ObjectList.vue';
 import { date } from '../../utils/format';
+import router from '../../router';
 
 const props = defineProps({
 	bench: String
@@ -60,6 +70,18 @@ const log = createResource({
 		};
 	}
 });
+
+const navigateToLogBrowser = () => {
+	show.value = false;
+	router.push({
+		name: 'Log Browser',
+		params: {
+			mode: 'bench',
+			docName: props.bench,
+			logId: logName.value
+		}
+	});
+};
 
 const listOptions = ref({
 	resource() {
@@ -98,6 +120,21 @@ const listOptions = ref({
 			fieldname: 'created',
 			format(value) {
 				return value ? date(value, 'lll') : '';
+			}
+		}
+	],
+	actions: () => [
+		{
+			slots: {
+				prefix: () => h(LucideSparkleIcon)
+			},
+			label: 'View in Log Browser',
+			onClick: () => {
+				show.value = false;
+				router.push({
+					name: 'Log Browser',
+					params: { mode: 'bench', docName: props.bench }
+				});
 			}
 		}
 	]

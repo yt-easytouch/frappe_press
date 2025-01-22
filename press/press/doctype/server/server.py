@@ -12,9 +12,10 @@ from functools import cached_property
 import boto3
 import frappe
 from frappe import _
-from frappe.core.utils import find
+from frappe.core.utils import find, find_all
 from frappe.installer import subprocess
 from frappe.model.document import Document
+from frappe.utils import cint
 from frappe.utils.user import is_system_user
 
 from press.agent import Agent
@@ -27,7 +28,7 @@ from press.telegram_utils import Telegram
 from press.utils import fmt_timedelta, log_error
 
 if typing.TYPE_CHECKING:
-	from press.press.doctype.press_job.press_job import Bench
+	from press.press.doctype.bench.bench import Bench
 	from press.press.doctype.virtual_machine.virtual_machine import VirtualMachine
 
 
@@ -97,13 +98,15 @@ class BaseServer(Document, TagHelpers):
 		return doc
 
 	@dashboard_whitelist()
-	def increase_disk_size_for_server(self, server: str, increment: int) -> None:
+	def increase_disk_size_for_server(
+		self, server: str, increment: int, mountpoint: str | None = None
+	) -> None:
 		if server == self.name:
-			self.increase_disk_size(increment)
+			self.increase_disk_size(increment=increment, mountpoint=mountpoint)
 			self.create_subscription_for_storage(increment)
 		else:
 			server_doc = frappe.get_doc("Database Server", server)
-			server_doc.increase_disk_size(increment)
+			server_doc.increase_disk_size(increment=increment, mountpoint=mountpoint)
 			server_doc.create_subscription_for_storage(increment)
 
 	@dashboard_whitelist()
@@ -204,6 +207,8 @@ class BaseServer(Document, TagHelpers):
 
 		if not self.hostname_abbreviation:
 			self._set_hostname_abbreviation()
+
+		self.validate_mounts()
 
 	def _set_hostname_abbreviation(self):
 		self.hostname_abbreviation = get_hostname_abbreviation(self.hostname)
@@ -490,6 +495,8 @@ class BaseServer(Document, TagHelpers):
 
 	def _cleanup_unused_files(self):
 		agent = Agent(self.name, self.doctype)
+		if agent.should_skip_requests():
+			return
 		agent.cleanup_unused_files()
 
 	def on_trash(self):
@@ -514,25 +521,31 @@ class BaseServer(Document, TagHelpers):
 			log_error(f"Error removing glassfile: {e.output.decode()}")
 
 	@frappe.whitelist()
-	def extend_ec2_volume(self):
+	def extend_ec2_volume(self, device=None):
 		if self.provider not in ("AWS EC2", "OCI"):
 			return
-		restart_mariadb = (
-			self.doctype == "Database Server" and self.is_disk_full()
+		# Restart MariaDB if MariaDB disk is full
+		mountpoint = self.guess_data_disk_mountpoint()
+		restart_mariadb = self.doctype == "Database Server" and self.is_disk_full(
+			mountpoint
 		)  # check before breaking glass to ensure state of mariadb
 		self.break_glass()
+		if not device:
+			# Try the best guess. Try extending the data volume
+			volume = self.find_mountpoint_volume(mountpoint)
+			device = self.get_device_from_volume_id(volume.volume_id)
 		try:
 			ansible = Ansible(
 				playbook="extend_ec2_volume.yml",
 				server=self,
-				variables={"restart_mariadb": restart_mariadb},
+				variables={"restart_mariadb": restart_mariadb, "device": device},
 			)
 			ansible.run()
 		except Exception:
 			log_error("EC2 Volume Extend Exception", server=self.as_dict())
 
-	def enqueue_extend_ec2_volume(self):
-		frappe.enqueue_doc(self.doctype, self.name, "extend_ec2_volume")
+	def enqueue_extend_ec2_volume(self, device):
+		frappe.enqueue_doc(self.doctype, self.name, "extend_ec2_volume", device=device)
 
 	@cached_property
 	def time_to_wait_before_updating_volume(self) -> timedelta | int:
@@ -550,7 +563,7 @@ class BaseServer(Document, TagHelpers):
 		return diff if diff < timedelta(hours=6) else 0
 
 	@frappe.whitelist()
-	def increase_disk_size(self, increment=50) -> bool:
+	def increase_disk_size(self, increment=50, mountpoint=None) -> bool:
 		if self.provider not in ("AWS EC2", "OCI"):
 			return
 		if self.provider == "AWS EC2" and self.time_to_wait_before_updating_volume:
@@ -558,12 +571,50 @@ class BaseServer(Document, TagHelpers):
 				f"Please wait {fmt_timedelta(self.time_to_wait_before_updating_volume)} before resizing volume",
 				VolumeResizeLimitError,
 			)
+		if not mountpoint:
+			mountpoint = self.guess_data_disk_mountpoint()
+
+		volume = self.find_mountpoint_volume(mountpoint)
+
 		virtual_machine: "VirtualMachine" = frappe.get_doc("Virtual Machine", self.virtual_machine)
-		virtual_machine.increase_disk_size(increment)
+		virtual_machine.increase_disk_size(volume.volume_id, increment)
 		if self.provider == "AWS EC2":
-			self.enqueue_extend_ec2_volume()
+			device = self.get_device_from_volume_id(volume.volume_id)
+			self.enqueue_extend_ec2_volume(device)
 		elif self.provider == "OCI":
+			# TODO: Add support for volumes on OCI
+			# Non-boot volumes might not need resize
 			self.reboot()
+
+	def guess_data_disk_mountpoint(self) -> str:
+		if not self.has_data_volume:
+			return "/"
+
+		volumes = self.get_volume_mounts()
+		if volumes:
+			if self.doctype == "Server":
+				mountpoint = "/opt/volumes/benches"
+			elif self.doctype == "Database Server":
+				mountpoint = "/opt/volumes/mariadb"
+		else:
+			mountpoint = "/"
+		return mountpoint
+
+	def find_mountpoint_volume(self, mountpoint):
+		machine: "VirtualMachine" = frappe.get_doc("Virtual Machine", self.virtual_machine)
+
+		if len(machine.volumes) == 1:
+			# If there is only one volume,
+			# then all mountpoints are on the same volume
+			return machine.volumes[0]
+
+		volumes = self.get_volume_mounts()
+		volume = find(volumes, lambda x: x.mount_point == mountpoint)
+		if volume:
+			# If the volume is in `mounts`, that means it's a data volume
+			return volume
+		# Otherwise it's a root volume
+		return find(machine.volumes, lambda v: v.device == "/dev/sda1")
 
 	def update_virtual_machine_name(self):
 		if self.provider not in ("AWS EC2", "OCI"):
@@ -633,7 +684,7 @@ class BaseServer(Document, TagHelpers):
 				"Subscription",
 				existing_subscription.name,
 				"additional_storage",
-				increment + int(existing_subscription.additional_storage),
+				increment + cint(existing_subscription.additional_storage),
 			)
 		else:
 			frappe.get_doc(
@@ -721,6 +772,10 @@ class BaseServer(Document, TagHelpers):
 	def change_plan(self, plan, ignore_card_setup=False):
 		self.can_change_plan(ignore_card_setup)
 		plan = frappe.get_doc("Server Plan", plan)
+		self._change_plan(plan)
+		self.run_press_job("Resize Server", {"machine_type": plan.instance_type})
+
+	def _change_plan(self, plan):
 		self.ram = plan.memory
 		self.save()
 		self.reload()
@@ -733,7 +788,6 @@ class BaseServer(Document, TagHelpers):
 				"to_plan": plan.name,
 			}
 		).insert()
-		self.run_press_job("Resize Server", {"machine_type": plan.instance_type})
 
 	@frappe.whitelist()
 	def create_image(self):
@@ -919,15 +973,16 @@ class BaseServer(Document, TagHelpers):
 
 	@frappe.whitelist()
 	def reboot_with_serial_console(self):
-		if self.provider in ("AWS EC2",):
-			console = frappe.new_doc("Serial Console Log")
-			console.server_type = self.doctype
-			console.server = self.name
-			console.virtual_machine = self.virtual_machine
-			console.action = "reboot"
-			console.save()
-			console.reload()
-			console.run_sysrq()
+		if self.provider != "AWS EC2":
+			raise NotImplementedError
+		console = frappe.new_doc("Serial Console Log")
+		console.server_type = self.doctype
+		console.server = self.name
+		console.virtual_machine = self.virtual_machine
+		console.action = "reboot"
+		console.save()
+		console.reload()
+		console.run_sysrq()
 
 	@dashboard_whitelist()
 	def reboot(self):
@@ -939,6 +994,155 @@ class BaseServer(Document, TagHelpers):
 	def rename(self, title):
 		self.title = title
 		self.save()
+
+	def validate_mounts(self):
+		if not self.virtual_machine:
+			return
+		machine = frappe.get_doc("Virtual Machine", self.virtual_machine)
+		if machine.has_data_volume and len(machine.volumes) > 1 and not self.mounts:
+			self.fetch_volumes_from_virtual_machine()
+			self.set_default_mount_points()
+			self.set_mount_properties()
+
+	def fetch_volumes_from_virtual_machine(self):
+		machine = frappe.get_doc("Virtual Machine", self.virtual_machine)
+		for volume in machine.volumes:
+			if volume.device == "/dev/sda1":
+				# Skip root volume. This is for AWS other providers may have different root volume
+				continue
+			self.append("mounts", {"volume_id": volume.volume_id})
+
+	def set_default_mount_points(self):
+		first = self.mounts[0]
+		if self.doctype == "Server":
+			first.mount_point = "/opt/volumes/benches"
+			self.append(
+				"mounts",
+				{
+					"mount_type": "Bind",
+					"mount_point": "/home/frappe/benches",
+					"source": "/opt/volumes/benches/home/frappe/benches",
+					"mount_point_owner": "frappe",
+					"mount_point_group": "frappe",
+				},
+			)
+		elif self.doctype == "Database Server":
+			first.mount_point = "/opt/volumes/mariadb"
+			self.append(
+				"mounts",
+				{
+					"mount_type": "Bind",
+					"mount_point": "/var/lib/mysql",
+					"source": "/opt/volumes/mariadb/var/lib/mysql",
+				},
+			)
+			self.append(
+				"mounts",
+				{
+					"mount_type": "Bind",
+					"mount_point": "/etc/mysql",
+					"source": "/opt/volumes/mariadb/etc/mysql",
+				},
+			)
+
+	def set_mount_properties(self):
+		for mount in self.mounts:
+			# set_defaults doesn't seem to work on children in a controller hook
+			default_fields = find_all(frappe.get_meta("Server Mount").fields, lambda x: x.default)
+			for field in default_fields:
+				fieldname = field.fieldname
+				if not mount.get(fieldname):
+					mount.set(fieldname, field.default)
+
+			mount_options = "defaults,nofail"  # Set default mount options
+			if mount.mount_options:
+				mount_options = f"{mount_options},{mount.mount_options}"
+
+			mount.mount_options = mount_options
+			if mount.mount_type == "Bind":
+				mount.filesystem = "none"
+				mount.mount_options = f"{mount.mount_options},bind"
+
+			if mount.volume_id:
+				# EBS volumes are named by their volume id
+				# There's likely a better way to do this
+				# https://docs.aws.amazon.com/ebs/latest/userguide/ebs-using-volumes.html
+				stripped_id = mount.volume_id.replace("-", "")
+				mount.source = self.get_device_from_volume_id(mount.volume_id)
+				if not mount.mount_point:
+					# If we don't know where to mount, mount it in /mnt/<volume_id>
+					mount.mount_point = f"/mnt/{stripped_id}"
+
+	def get_device_from_volume_id(self, volume_id):
+		stripped_id = volume_id.replace("-", "")
+		return f"/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_{ stripped_id }"
+
+	def get_mount_variables(self):
+		return {
+			"all_mounts_json": json.dumps([mount.as_dict() for mount in self.mounts], indent=4, default=str),
+			"volume_mounts_json": json.dumps(
+				self.get_volume_mounts(),
+				indent=4,
+				default=str,
+			),
+			"bind_mounts_json": json.dumps(
+				[mount.as_dict() for mount in self.mounts if mount.mount_type == "Bind"],
+				indent=4,
+				default=str,
+			),
+		}
+
+	def get_volume_mounts(self):
+		return [mount.as_dict() for mount in self.mounts if mount.mount_type == "Volume"]
+
+	@frappe.whitelist()
+	def mount_volumes(self):
+		frappe.enqueue_doc(self.doctype, self.name, "_mount_volumes", queue="short", timeout=1200)
+
+	def _mount_volumes(self):
+		try:
+			ansible = Ansible(
+				playbook="mount.yml",
+				server=self,
+				variables={**self.get_mount_variables()},
+			)
+			play = ansible.run()
+			self.reload()
+			if self._set_mount_status(play):
+				self.save()
+		except Exception:
+			log_error("Server Mount Exception", server=self.as_dict())
+
+	def _set_mount_status(self, play):
+		tasks = frappe.get_all(
+			"Ansible Task",
+			["result", "task"],
+			{
+				"play": play.name,
+				"status": ("in", ("Success", "Failure")),
+				"task": ("in", ("Mount Volumes", "Mount Bind Mounts", "Show Block Device UUIDs")),
+			},
+		)
+		mounts_changed = False
+		for task in tasks:
+			result = json.loads(task.result)
+			for row in result.get("results", []):
+				mount = find(self.mounts, lambda x: x.name == row.get("item", {}).get("name"))
+				if not mount:
+					mount = find(
+						self.mounts, lambda x: x.name == row.get("item", {}).get("item", {}).get("name")
+					)
+				if not mount:
+					continue
+				if task.task == "Show Block Device UUIDs":
+					mount.uuid = row.get("stdout", "").strip()
+					mounts_changed = True
+				else:
+					mount_status = {True: "Failure", False: "Success"}[row.get("failed", False)]
+					if mount.status != mount_status:
+						mount.status = mount_status
+						mounts_changed = True
+		return mounts_changed
 
 	def wait_for_cloud_init(self):
 		frappe.enqueue_doc(
@@ -958,12 +1162,11 @@ class BaseServer(Document, TagHelpers):
 		except Exception:
 			log_error("Cloud Init Wait Exception", server=self.as_dict())
 
-	@cached_property
-	def free_space(self):
+	def free_space(self, mountpoint: str) -> int:
 		from press.api.server import prometheus_query
 
 		response = prometheus_query(
-			f"""node_filesystem_avail_bytes{{instance="{self.name}", job="node", mountpoint="/"}}""",
+			f"""node_filesystem_avail_bytes{{instance="{self.name}", job="node", mountpoint="{mountpoint}"}}""",
 			lambda x: x["mountpoint"],
 			"Asia/Kolkata",
 			60,
@@ -973,16 +1176,15 @@ class BaseServer(Document, TagHelpers):
 			return response[0]["values"][-1]
 		return 50 * 1024 * 1024 * 1024  # Assume 50GB free space
 
-	def is_disk_full(self) -> bool:
-		return self.free_space == 0
+	def is_disk_full(self, mountpoint: str) -> bool:
+		return self.free_space(mountpoint) == 0
 
-	@property
-	def space_available_in_6_hours(self):
+	def space_available_in_6_hours(self, mountpoint: str) -> int:
 		from press.api.server import prometheus_query
 
 		response = prometheus_query(
 			f"""predict_linear(
-node_filesystem_avail_bytes{{instance="{self.name}", mountpoint="/"}}[3h], 6*3600
+node_filesystem_avail_bytes{{instance="{self.name}", mountpoint="{mountpoint}"}}[3h], 6*3600
 			)""",
 			lambda x: x["mountpoint"],
 			"Asia/Kolkata",
@@ -993,12 +1195,11 @@ node_filesystem_avail_bytes{{instance="{self.name}", mountpoint="/"}}[3h], 6*360
 			return -20 * 1024 * 1024 * 1024
 		return response[0]["values"][-1]
 
-	@property
-	def disk_capacity(self):
+	def disk_capacity(self, mountpoint: str) -> int:
 		from press.api.server import prometheus_query
 
 		response = prometheus_query(
-			f"""node_filesystem_size_bytes{{instance="{self.name}", job="node", mountpoint="/"}}""",
+			f"""node_filesystem_size_bytes{{instance="{self.name}", job="node", mountpoint="{mountpoint}"}}""",
 			lambda x: x["mountpoint"],
 			"Asia/Kolkata",
 			120,
@@ -1008,26 +1209,32 @@ node_filesystem_avail_bytes{{instance="{self.name}", mountpoint="/"}}[3h], 6*360
 			return response[0]["values"][-1]
 		return frappe.db.get_value("Virtual Machine", self.virtual_machine, "disk_size") * 1024 * 1024 * 1024
 
-	@cached_property
-	def size_to_increase_by_for_20_percent_available(self):  # min 50 GB, max 250 GB
+	def size_to_increase_by_for_20_percent_available(self, mountpoint: str):  # min 50 GB, max 250 GB
 		return int(
 			min(
 				self.auto_add_storage_max,
 				max(
 					self.auto_add_storage_min,
-					abs(self.disk_capacity - self.space_available_in_6_hours * 5) / 4 / 1024 / 1024 / 1024,
+					abs(self.disk_capacity(mountpoint) - self.space_available_in_6_hours(mountpoint) * 5)
+					/ 4
+					/ 1024
+					/ 1024
+					/ 1024,
 				),
 			)
 		)
 
-	def calculated_increase_disk_size(self, additional: int = 0):
+	def calculated_increase_disk_size(
+		self,
+		additional: int = 0,
+		mountpoint: str | None = None,
+	):
 		telegram = Telegram("Information")
+		buffer = self.size_to_increase_by_for_20_percent_available(mountpoint)
 		telegram.send(
-			f"Increasing disk on [{self.name}]({frappe.utils.get_url_to_form(self.doctype, self.name)}) by {self.size_to_increase_by_for_20_percent_available + additional}G"
+			f"Increasing disk (mount point {mountpoint})on [{self.name}]({frappe.utils.get_url_to_form(self.doctype, self.name)}) by {buffer + additional}G"
 		)
-		self.increase_disk_size_for_server(
-			self.name, self.size_to_increase_by_for_20_percent_available + additional
-		)
+		self.increase_disk_size_for_server(self.name, buffer + additional, mountpoint)
 
 	def prune_docker_system(self):
 		frappe.enqueue_doc(
@@ -1088,6 +1295,7 @@ class Server(BaseServer):
 		from frappe.types import DF
 
 		from press.press.doctype.resource_tag.resource_tag import ResourceTag
+		from press.press.doctype.server_mount.server_mount import ServerMount
 
 		agent_password: DF.Password | None
 		auto_add_storage_max: DF.Int
@@ -1098,6 +1306,7 @@ class Server(BaseServer):
 		domain: DF.Link | None
 		frappe_public_key: DF.Code | None
 		frappe_user_password: DF.Password | None
+		has_data_volume: DF.Check
 		hostname: DF.Data
 		hostname_abbreviation: DF.Data | None
 		ignore_incidents_since: DF.Datetime | None
@@ -1113,6 +1322,7 @@ class Server(BaseServer):
 		is_standalone_setup: DF.Check
 		is_upstream_setup: DF.Check
 		managed_database_service: DF.Link | None
+		mounts: DF.Table[ServerMount]
 		new_worker_allocation: DF.Check
 		plan: DF.Link | None
 		primary: DF.Link | None
@@ -1165,6 +1375,10 @@ class Server(BaseServer):
 		if not self.is_new() and self.has_value_changed("team"):
 			self.update_subscription()
 			frappe.db.delete("Press Role Permission", {"server": self.name})
+
+		# Enable bench memory limits for public servers
+		if self.public:
+			self.set_bench_memory_limits = True
 
 	def after_insert(self):
 		from press.press.doctype.press_role.press_role import (
@@ -1296,10 +1510,13 @@ class Server(BaseServer):
 					"certificate_private_key": certificate.private_key,
 					"certificate_full_chain": certificate.full_chain,
 					"certificate_intermediate_chain": certificate.intermediate_chain,
+					"docker_depends_on_mounts": self.docker_depends_on_mounts,
+					**self.get_mount_variables(),
 				},
 			)
 			play = ansible.run()
 			self.reload()
+			self._set_mount_status(play)
 			if play.status == "Success":
 				self.status = "Active"
 				self.is_server_setup = True
@@ -1702,6 +1919,12 @@ class Server(BaseServer):
 			ansible.run()
 		except Exception:
 			log_error("Earlyoom Install Exception", server=self.as_dict())
+
+	@property
+	def docker_depends_on_mounts(self):
+		mount_points = set(mount.mount_point for mount in self.mounts)
+		bench_mount_points = set(["/home/frappe/benches"])
+		return bench_mount_points.issubset(mount_points)
 
 
 def scale_workers(now=False):

@@ -1,6 +1,5 @@
 # Copyright (c) 2020, Frappe and contributors
 # For license information, please see license.txt
-
 from __future__ import annotations
 
 import frappe
@@ -37,6 +36,9 @@ class SiteActivity(Document):
 			"Drop Offsite Backups",
 			"Enable Database Access",
 			"Disable Database Access",
+			"Create Database User",
+			"Remove Database User",
+			"Modify Database User Permissions",
 		]
 		job: DF.Link | None
 		reason: DF.SmallText | None

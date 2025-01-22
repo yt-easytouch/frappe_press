@@ -42,6 +42,7 @@ import { computed, h, ref } from 'vue';
 import LucideAppWindow from '~icons/lucide/app-window';
 import ObjectList from '../ObjectList.vue';
 import { toast } from 'vue-sonner';
+import { getToastErrorMessage } from '../../utils/toast';
 import { confirmDialog, icon, renderDialog } from '../../utils/components';
 import RoleConfigureDialog from './RoleConfigureDialog.vue';
 
@@ -215,10 +216,7 @@ const rolePermissions = ref({
 											permissions.reload();
 											return 'Permission added successfully';
 										},
-										error: e =>
-											e.messages.length
-												? e.messages.join('\n')
-												: 'An error occurred'
+										error: e => getToastErrorMessage(e)
 									}
 								);
 							}

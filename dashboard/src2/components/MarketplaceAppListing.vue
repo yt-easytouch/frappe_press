@@ -33,7 +33,7 @@
 							:upload-args="{
 								doctype: 'Marketplace App',
 								docname: app.doc.name,
-								method: 'press.api.marketplace.update_app_image'
+								method: 'press.api.marketplace.update_app_image',
 							}"
 						>
 							<template
@@ -60,33 +60,6 @@
 							@input="editing = true"
 							v-model="marketplaceApp.title"
 						/>
-					</div>
-					<div class="pb-8 sm:col-span-4">
-						<span class="text-base font-medium">App Source</span>
-						<p class="pt-2 text-xs">
-							Note: Only open-source or source-available applications are
-							allowed on the Frappe Marketplace. You can keep your repository
-							private, but if a user requests the source code, you must provide
-							it.
-						</p>
-						<div>
-							<FormControl
-								class="pt-4"
-								label="GitHub Repository URL"
-								type="text"
-								:disabled="true"
-								v-model="marketplaceApp.github_repository_url"
-							/>
-							<p
-								v-if="marketplaceApp.is_public_repo"
-								class="pt-3 text-xs text-green-700"
-							>
-								The GitHub repository is public.
-							</p>
-							<p v-else class="pt-3 text-xs text-red-700">
-								The GitHub repository is private.
-							</p>
-						</div>
 					</div>
 					<div class="sm:col-span-4">
 						<span class="text-base font-medium">Links</span>
@@ -145,7 +118,7 @@
 							:upload-args="{
 								doctype: 'Marketplace App',
 								docname: app.name,
-								method: 'press.api.marketplace.add_app_screenshot'
+								method: 'press.api.marketplace.add_app_screenshot',
 							}"
 						>
 							<template
@@ -211,13 +184,14 @@
 import { TextEditor } from 'frappe-ui';
 import FileUploader from '@/components/FileUploader.vue';
 import { toast } from 'vue-sonner';
+import { getToastErrorMessage } from '../utils/toast';
 
 export default {
 	name: 'MarketplaceAppOverview',
 	props: ['app'],
 	components: {
 		FileUploader,
-		TextEditor
+		TextEditor,
 	},
 	data() {
 		return {
@@ -232,9 +206,7 @@ export default {
 				privacy_policy: '',
 				description: '',
 				long_description: '',
-				github_repository_url: '',
-				is_public_repo: false
-			}
+			},
 		};
 	},
 	resources: {
@@ -246,9 +218,9 @@ export default {
 						dt: 'Marketplace App',
 						dn: this.app.doc.name,
 						method: 'update_listing',
-						args: this.marketplaceApp
+						args: this.marketplaceApp,
 					};
-				}
+				},
 			};
 		},
 		listingData() {
@@ -258,7 +230,7 @@ export default {
 					return {
 						dt: 'Marketplace App',
 						dn: this.app.doc.name,
-						method: 'listing_details'
+						method: 'listing_details',
 					};
 				},
 				auto: true,
@@ -266,19 +238,15 @@ export default {
 					this.marketplaceApp = { ...this.marketplaceApp, ...response.message };
 				},
 				onError(e) {
-					toast.error(
-						e.messages?.length
-							? e.messages.join('\n')
-							: e.message || 'Failed to fetch listing data'
-					);
-				}
+					toast.error(getToastErrorMessage(e, 'Failed to fetch listing data'));
+				},
 			};
 		},
 		removeScreenshot() {
 			return {
-				url: 'press.api.marketplace.remove_app_screenshot'
+				url: 'press.api.marketplace.remove_app_screenshot',
 			};
-		}
+		},
 	},
 	methods: {
 		imageAddSuccess(message) {
@@ -295,11 +263,11 @@ export default {
 					return 'Updated successfully';
 				},
 				loading: 'Updating listing...',
-				error: err => {
+				error: (err) => {
 					return err.messages?.length
 						? err.messages.join('\n')
 						: err.message || 'Failed to update listing';
-				}
+				},
 			});
 		},
 		dropdownOptions(image) {
@@ -311,7 +279,7 @@ export default {
 						toast.promise(
 							this.$resources.removeScreenshot.submit({
 								name: this.app.doc.name,
-								file: image
+								file: image,
 							}),
 							{
 								loading: 'Deleting screenshot...',
@@ -319,15 +287,15 @@ export default {
 									this.$resources.listingData.reload();
 									return 'Screenshot deleted successfully';
 								},
-								error: err => {
+								error: (err) => {
 									return err.messages?.length
 										? err.messages.join('\n')
 										: err.message || 'Failed to delete screenshot';
-								}
-							}
+								},
+							},
 						);
-					}
-				}
+					},
+				},
 			];
 		},
 		validateLink(link) {
@@ -349,12 +317,12 @@ export default {
 				return false;
 			}
 			return true;
-		}
+		},
 	},
 	computed: {
 		profileImageUrl() {
 			return this.app.doc.image;
-		}
-	}
+		},
+	},
 };
 </script>

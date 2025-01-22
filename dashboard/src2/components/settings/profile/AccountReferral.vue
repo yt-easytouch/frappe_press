@@ -7,12 +7,13 @@
 	>
 		<div class="flex flex-col space-y-4 overflow-hidden">
 			<ClickToCopyField :textContent="referralLink" />
-			<span class="text-base font-medium text-gray-700">
-				When someone sign's up using the above link and spends at least
-				{{ minimumSpentAmount }} on Easytouch Cloud, you
+			<span class="text-sm font-medium leading-4 text-gray-700">
+				Invite someone to Easytouch Cloud and
 				<strong>
-					get {{ creditAmountInTeamCurrency }} in Easytouch Cloud Credits!
-				</strong>
+					get
+					{{ creditAmountInTeamCurrency }} in Easytouch Cloud credits</strong
+				>
+				when they sign up and spend at least {{ minimumSpentAmount }}!
 			</span>
 		</div>
 	</Card>

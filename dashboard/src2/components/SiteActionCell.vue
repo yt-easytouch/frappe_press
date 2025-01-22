@@ -25,6 +25,7 @@ import { getCachedDocumentResource } from 'frappe-ui';
 import { defineAsyncComponent, h } from 'vue';
 import { toast } from 'vue-sonner';
 import { confirmDialog, renderDialog } from '../utils/components';
+import { getToastErrorMessage } from '../utils/toast';
 import router from '../router';
 import { isLastSite } from '../data/team';
 
@@ -47,7 +48,7 @@ function getSiteActionHandler(action) {
 		'Restore from an existing site': defineAsyncComponent(() =>
 			import('./site/SiteDatabaseRestoreFromURLDialog.vue')
 		),
-		'Access site database': defineAsyncComponent(() =>
+		'Manage database users': defineAsyncComponent(() =>
 			import('./SiteDatabaseAccessDialog.vue')
 		),
 		'Version upgrade': defineAsyncComponent(() =>
@@ -260,9 +261,7 @@ function onScheduleBackup() {
 						});
 						return 'Backup scheduled successfully';
 					},
-					error: e => {
-						return e.messages?.length ? e.messages.join('\n') : e.message;
-					}
+					error: e => getToastErrorMessage(e)
 				}
 			);
 		}

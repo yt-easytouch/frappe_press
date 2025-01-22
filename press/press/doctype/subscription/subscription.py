@@ -7,6 +7,7 @@ import frappe
 import rq
 from frappe.model.document import Document
 from frappe.query_builder.functions import Coalesce, Count
+from frappe.utils import cint, flt
 
 from press.overrides import get_permission_query_conditions_for_doctype
 from press.press.doctype.site_plan.site_plan import SitePlan
@@ -113,7 +114,7 @@ class Subscription(Document):
 			return
 		try:
 			self.enabled = True
-			self.save()
+			self.save(ignore_permissions=True)
 		except Exception:
 			frappe.log_error(title="Enable Subscription Error")
 
@@ -122,23 +123,20 @@ class Subscription(Document):
 			return
 		try:
 			self.enabled = False
-			self.save()
+			self.save(ignore_permissions=True)
 		except Exception:
 			frappe.log_error(title="Disable Subscription Error")
 
 	@frappe.whitelist()
-	def create_usage_record(self):
+	def create_usage_record(self, date: DF.Date | None = None):
 		cannot_charge = not self.can_charge_for_subscription()
 		if cannot_charge:
 			return None
 
-		if self.is_usage_record_created():
+		if self.is_usage_record_created(date):
 			return None
 
 		team = frappe.get_cached_doc("Team", self.team)
-
-		if self.additional_storage and team.skip_add_on_billing:
-			return None
 
 		if team.parent_team:
 			team = frappe.get_cached_doc("Team", team.parent_team)
@@ -154,7 +152,7 @@ class Subscription(Document):
 		if self.additional_storage:
 			price = plan.price_inr if team.currency == "INR" else plan.price_usd
 			price_per_day = price / plan.period  # no rounding off to avoid discrepancies
-			amount = price_per_day * int(self.additional_storage)
+			amount = flt((price_per_day * cint(self.additional_storage)), 2)
 		else:
 			amount = plan.get_price_for_interval(self.interval, team.currency)
 
@@ -166,6 +164,7 @@ class Subscription(Document):
 			plan_type=self.plan_type,
 			plan=plan.name,
 			amount=amount,
+			date=date,
 			subscription=self.name,
 			interval=self.interval,
 			site=(
@@ -189,7 +188,7 @@ class Subscription(Document):
 
 		return True
 
-	def is_usage_record_created(self):
+	def is_usage_record_created(self, date=None):
 		filters = {
 			"team": self.team,
 			"document_type": self.document_type,
@@ -200,7 +199,8 @@ class Subscription(Document):
 		}
 
 		if self.interval == "Daily":
-			filters.update({"date": frappe.utils.today()})
+			date = date or frappe.utils.today()
+			filters.update({"date": date})
 
 		if self.interval == "Monthly":
 			date = frappe.utils.getdate()
@@ -228,6 +228,7 @@ class Subscription(Document):
 			filters,
 			pluck="name",
 			limit=1,
+			ignore_ifnull=True,
 		)
 		if results:
 			link = frappe.utils.get_link_to_form("Subscription", results[0])

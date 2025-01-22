@@ -118,6 +118,7 @@ class DeployCandidate(Document):
 		pending_duration: DF.Time | None
 		pending_end: DF.Datetime | None
 		pending_start: DF.Datetime | None
+		redis_cache_size: DF.Int
 		retry_count: DF.Int
 		scheduled_time: DF.Datetime | None
 		status: DF.Literal["Draft", "Scheduled", "Pending", "Preparing", "Running", "Success", "Failure"]
@@ -397,6 +398,9 @@ class DeployCandidate(Document):
 		self._set_status_failure()
 		should_retry = self.should_build_retry(exc=exc, job=job)
 
+		if not should_retry:
+			self._fail_site_group_deploy_if_exists()
+
 		# Do not send a notification if the build is being retried.
 		if not should_retry and create_build_failed_notification(self, exc):
 			self.user_addressable_failure = True
@@ -529,6 +533,8 @@ class DeployCandidate(Document):
 		step = self.get_step("package", "context") or frappe._dict()
 		step.status = "Running"
 		start_time = now()
+		self.save(ignore_permissions=True, ignore_version=True)
+		frappe.db.commit()
 
 		# make sure to set ownership of build_directory and its contents to 1000:1000
 		def fix_content_permission(tarinfo):
@@ -537,17 +543,24 @@ class DeployCandidate(Document):
 			return tarinfo
 
 		tmp_file_path = tempfile.mkstemp(suffix=".tar.gz")[1]
-		with tarfile.open(tmp_file_path, "w:gz") as tar:
-			tar.add(self.build_directory, arcname=".", filter=fix_content_permission)
+		with tarfile.open(tmp_file_path, "w:gz", compresslevel=5) as tar:
+			if frappe.conf.developer_mode:
+				tar.add(self.build_directory, arcname=".", filter=fix_content_permission)
+			else:
+				tar.add(self.build_directory, arcname=".")
 
 		step.status = "Success"
 		step.duration = get_duration(start_time)
+		self.save(ignore_permissions=True, ignore_version=True)
+		frappe.db.commit()
 		return tmp_file_path
 
 	def _upload_build_context(self, context_filepath: str, build_server: str):
 		step = self.get_step("upload", "context") or frappe._dict()
 		step.status = "Running"
 		start_time = now()
+		self.save(ignore_permissions=True, ignore_version=True)
+		frappe.db.commit()
 
 		try:
 			upload_filename = self.upload_build_context_for_docker_build(
@@ -944,6 +957,8 @@ class DeployCandidate(Document):
 		step.duration = get_duration(start_time)
 		step.output = "Pre-build validations passed"
 		step.status = "Success"
+		self.save(ignore_permissions=True, ignore_version=True)
+		frappe.db.commit()
 
 	def _clone_app_repo(self, app: "DeployCandidateApp") -> str:
 		"""
@@ -1517,6 +1532,20 @@ class DeployCandidate(Document):
 			if not is_build_job(job):
 				continue
 			stop_background_job(job)
+
+	def _fail_site_group_deploy_if_exists(self):
+		site_group_deploy = frappe.db.get_value(
+			"Site Group Deploy",
+			{
+				"release_group": self.group,
+				"site": ("is", "not set"),
+				"bench": ("is", "not set"),
+			},
+		)
+		if site_group_deploy:
+			frappe.get_doc("Site Group Deploy", site_group_deploy).update_site_group_deploy_on_deploy_failure(
+				self,
+			)
 
 
 def can_pull_update(file_paths: list[str]) -> bool:

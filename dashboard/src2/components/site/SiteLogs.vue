@@ -3,6 +3,8 @@
 </template>
 
 <script>
+import { h } from 'vue';
+import LucideSparkleIcon from '~icons/lucide/sparkle';
 import { date } from '../../utils/format';
 import ObjectList from '../ObjectList.vue';
 
@@ -36,6 +38,21 @@ export default {
 	},
 	computed: {
 		logs() {
+			const knownTypes = [
+				'frappe',
+				'scheduler',
+				'database',
+				'pdf',
+				'wkhtmltopdf',
+				'ipython'
+			];
+
+			if (this.type && !knownTypes.includes(this.type)) {
+				return this.$resources.logs.data.filter(
+					d => !knownTypes.includes(d.name.split('.')[0])
+				);
+			}
+
 			// logs of a particular type
 			return this.$resources.logs.data.filter(
 				d => d.name.split('.')[0] === this.type
@@ -65,13 +82,6 @@ export default {
 							}
 						},
 						{
-							label: 'Created On',
-							fieldname: 'created',
-							format(value) {
-								return value ? date(value, 'lll') : '';
-							}
-						},
-						{
 							label: 'Modified On',
 							fieldname: 'modified',
 							format(value) {
@@ -80,6 +90,18 @@ export default {
 						}
 					],
 					actions: () => [
+						{
+							slots: {
+								prefix: () => h(LucideSparkleIcon)
+							},
+							label: 'View in Log Browser',
+							onClick: () => {
+								this.$router.push({
+									name: 'Log Browser',
+									params: { mode: 'site', docName: this.name }
+								});
+							}
+						},
 						{
 							label: 'Refresh',
 							icon: 'refresh-ccw',
@@ -150,6 +172,16 @@ export default {
 									type: 'wkhtmltopdf'
 								}
 							}
+						},
+						{
+							title: 'Other Logs',
+							route: {
+								name: 'Site Logs',
+								params: {
+									name: this.name,
+									type: 'other'
+								}
+							}
 						}
 					],
 					columns: [
@@ -172,6 +204,20 @@ export default {
 										this.$router.push(row.route);
 									}
 								};
+							}
+						}
+					],
+					actions: () => [
+						{
+							slots: {
+								prefix: () => h(LucideSparkleIcon)
+							},
+							label: 'View in Log Browser',
+							onClick: () => {
+								this.$router.push({
+									name: 'Log Browser',
+									params: { mode: 'site', docName: this.name }
+								});
 							}
 						}
 					]

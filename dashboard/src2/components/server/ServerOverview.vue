@@ -17,7 +17,7 @@
 					>
 						<div
 							v-if="d.type === 'header'"
-							class="m-auto flex items-center justify-between"
+							class="m-auto flex h-full items-center justify-between"
 						>
 							<div
 								v-if="d.type === 'header'"
@@ -25,7 +25,27 @@
 							>
 								<div class="text-base text-gray-700">{{ d.label }}</div>
 								<div class="space-y-1">
-									<div class="text-base text-gray-900" v-html="d.value" />
+									<div class="flex items-center text-base text-gray-900">
+										{{ d.value }}
+										<Tooltip v-if="d.isPremium" text="Premium Server">
+											<!-- this icon isn't available in unplugin package yet -->
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												width="24"
+												height="24"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												class="lucide lucide-circle-parking ml-2 h-4 w-4 text-gray-600"
+											>
+												<circle cx="12" cy="12" r="10" />
+												<path d="M9 17V7h4a3 3 0 0 1 0 6H9" />
+											</svg>
+										</Tooltip>
+									</div>
 									<div class="flex space-x-1">
 										<div class="text-sm text-gray-600" v-html="d.subValue" />
 										<Tooltip v-if="d.help" :text="d.help">
@@ -92,6 +112,7 @@ import { toast } from 'vue-sonner';
 import { h, defineAsyncComponent } from 'vue';
 import { getCachedDocumentResource } from 'frappe-ui';
 import { confirmDialog, renderDialog } from '../../utils/components';
+import { getToastErrorMessage } from '../../utils/toast';
 import ServerPlansDialog from './ServerPlansDialog.vue';
 import ServerLoadAverage from './ServerLoadAverage.vue';
 import { getDocResource } from '../../utils/resource';
@@ -111,15 +132,15 @@ export default {
 				h(ServerPlansDialog, {
 					server:
 						serverType === 'Server'
-							? this.$appServer.doc.name
-							: this.$dbServer.doc.name,
+							? this.$appServer.name
+							: this.$dbServer.name,
 					serverType
 				})
 			);
 		},
 		currentUsage(serverType) {
-			if (!this.$appServer.doc) return [];
-			if (!this.$dbServer.doc) return [];
+			if (!this.$appServer?.doc) return [];
+			if (!this.$dbServer?.doc) return [];
 
 			let formatBytes = v => this.$format.bytes(v, 0, 2);
 
@@ -170,6 +191,7 @@ export default {
 							  )}/mo`
 							: '',
 					type: 'header',
+					isPremium: !!currentPlan?.premium,
 					help:
 						additionalStorage > 0
 							? `Server Plan: ${this.$format.userCurrency(
@@ -274,9 +296,10 @@ export default {
 												loading: 'Increasing disk size...',
 												success: 'Disk size is scheduled to increase',
 												error: e =>
-													e.messages.length
-														? e.messages.join('\n')
-														: e.message || 'Failed to increase disk size'
+													getToastErrorMessage(
+														e,
+														'Failed to increase disk size'
+													)
 											}
 										);
 									}

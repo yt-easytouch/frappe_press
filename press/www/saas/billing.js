@@ -101,7 +101,7 @@ $(document).ready(function () {
 function add_frappe_cloud_dashboard_link() {
 	$('.dropdown-navbar-user .dropdown-menu .dropdown-divider').before(
 		`<a class="dropdown-item"
-		href="${frappe_cloud_base_endpoint}/dashboard"
+		onclick="initiateRequestForLoginToFrappeCloud()"
 		>Log In to Frappe Cloud</a>`,
 	);
 }
@@ -143,14 +143,19 @@ function requestLoginToFC(freezing_msg) {
 			domain: window.location.hostname,
 		},
 		freeze: true,
-		freeze_message: freezing_msg || 'Initating login to Frappe Cloud',
+		freeze_message: freezing_msg || 'Initiating login to Frappe Cloud',
 		success: function (r) {
 			showFCLogindialog(r.message.email);
+			setErrorMessage('');
 		},
 		error: function (r) {
 			frappe.throw('Failed to login to Frappe Cloud. Please try again');
 		},
 	});
+}
+
+function setErrorMessage(message) {
+	$('#fc-login-error').text(message);
 }
 
 function showFCLogindialog(email) {
@@ -187,18 +192,13 @@ function showFCLogindialog(email) {
 		window.fc_login_dialog = d;
 	}
 
-	const setErrorMessage = (message) => {
-		$('#fc-login-error').text(message);
-	};
-
 	function verifyCode() {
 		let otp = $('#fc-login-verification-code').val();
 		if (!otp) {
 			return;
 		}
-		frappe.call({
-			url: frappe_cloud_base_endpoint,
-			method: 'press.api.developer.saas.validate_login_to_fc',
+		frappe.request.call({
+			url: `${frappe_cloud_base_endpoint}/api/method/press.api.developer.saas.validate_login_to_fc`,
 			type: 'POST',
 			args: {
 				domain: window.location.hostname,
@@ -207,7 +207,7 @@ function showFCLogindialog(email) {
 			freeze: true,
 			silent: true,
 			freeze_message: 'Validating verification code',
-			callback: function (r) {
+			success: function (r) {
 				if (r.login_token) {
 					fc_login_dialog.hide();
 					window.open(

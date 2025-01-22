@@ -23,6 +23,7 @@ class PressSettings(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
+		from press.press.doctype.app_group.app_group import AppGroup
 		from press.press.doctype.erpnext_app.erpnext_app import ERPNextApp
 
 		agent_github_access_token: DF.Data | None
@@ -51,6 +52,7 @@ class PressSettings(Document):
 		commission: DF.Float
 		compress_app_cache: DF.Check
 		data_40: DF.Data | None
+		default_apps: DF.Table[AppGroup]
 		default_outgoing_id: DF.Data | None
 		default_outgoing_pass: DF.Data | None
 		disable_agent_job_deduplication: DF.Check
@@ -61,6 +63,8 @@ class PressSettings(Document):
 		docker_registry_username: DF.Data | None
 		domain: DF.Link | None
 		eff_registration_email: DF.Data
+		enable_app_grouping: DF.Check
+		enable_email_pre_verification: DF.Check
 		enable_google_oauth: DF.Check
 		enable_site_pooling: DF.Check
 		enforce_storage_limits: DF.Check
@@ -83,6 +87,7 @@ class PressSettings(Document):
 		github_app_id: DF.Data | None
 		github_app_private_key: DF.Code | None
 		github_app_public_link: DF.Data | None
+		github_pat_token: DF.Data | None
 		github_webhook_secret: DF.Data | None
 		gst_percentage: DF.Float
 		hetzner_api_token: DF.Password | None
@@ -100,6 +105,8 @@ class PressSettings(Document):
 		offsite_backups_count: DF.Int
 		offsite_backups_provider: DF.Literal["AWS S3"]
 		offsite_backups_secret_access_key: DF.Password | None
+		partnership_fee_inr: DF.Int
+		partnership_fee_usd: DF.Int
 		plausible_api_key: DF.Password | None
 		plausible_site_id: DF.Data | None
 		plausible_url: DF.Data | None
@@ -111,6 +118,7 @@ class PressSettings(Document):
 		razorpay_key_secret: DF.Password | None
 		razorpay_webhook_secret: DF.Data | None
 		realtime_job_updates: DF.Check
+		redis_cache_size: DF.Int
 		remote_access_key_id: DF.Data | None
 		remote_link_expiry: DF.Int
 		remote_secret_access_key: DF.Password | None
@@ -150,6 +158,11 @@ class PressSettings(Document):
 		verify_cards_with_micro_charge: DF.Literal["No", "Only INR", "Only USD", "Both INR and USD"]
 		webroot_directory: DF.Data | None
 	# end: auto-generated types
+
+	dashboard_fields = (
+		"partnership_fee_inr",
+		"partnership_fee_usd",
+	)
 
 	@frappe.whitelist()
 	def create_stripe_webhook(self):
@@ -204,7 +217,7 @@ class PressSettings(Document):
 
 	@property
 	def boto3_offsite_backup_session(self) -> Session:
-		"""Get new preconfigured boto3 session for offisite backup provider."""
+		"""Get new preconfigured boto3 session for offsite backup provider."""
 		return Session(
 			aws_access_key_id=self.offsite_backups_access_key_id,
 			aws_secret_access_key=self.get_password(
@@ -245,3 +258,9 @@ class PressSettings(Document):
 		api_key_sid = self.twilio_api_key_sid
 		api_key_secret = self.get_password("twilio_api_key_secret")
 		return Client(api_key_sid, api_key_secret, account_sid)
+
+	def get_default_apps(self):
+		if hasattr(self, "enable_app_grouping") and hasattr(self, "default_apps"):  # noqa
+			if self.enable_app_grouping:
+				return [app.app for app in self.default_apps]
+		return []

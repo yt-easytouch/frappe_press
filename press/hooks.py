@@ -124,6 +124,7 @@ permission_query_conditions = {
 	"Press Webhook": "press.press.doctype.press_webhook.press_webhook.get_permission_query_conditions",
 	"Press Webhook Log": "press.press.doctype.press_webhook_log.press_webhook_log.get_permission_query_conditions",
 	"SQL Playground Log": "press.press.doctype.sql_playground_log.sql_playground_log.get_permission_query_conditions",
+	"Site Database User": "press.press.doctype.site_database_user.site_database_user.get_permission_query_conditions",
 }
 has_permission = {
 	"Site": "press.overrides.has_permission",
@@ -147,6 +148,7 @@ has_permission = {
 	"Press Webhook Log": "press.overrides.has_permission",
 	"Press Webhook Attempt": "press.press.doctype.press_webhook_attempt.press_webhook_attempt.has_permission",
 	"SQL Playground Log": "press.overrides.has_permission",
+	"Site Database User": "press.overrides.has_permission",
 }
 
 # Document Events
@@ -180,7 +182,6 @@ scheduler_events = {
 	"daily_long": [
 		"press.press.audit.check_bench_fields",
 		"press.press.audit.check_offsite_backups",
-		"press.press.audit.check_backup_records",
 		"press.press.audit.check_app_server_replica_benches",
 		"press.press.doctype.invoice.invoice.finalize_unpaid_prepaid_credit_invoices",
 		"press.press.doctype.bench.bench.sync_analytics",
@@ -190,6 +191,7 @@ scheduler_events = {
 		"press.press.doctype.remote_file.remote_file.poll_file_statuses",
 		"press.press.doctype.site_domain.site_domain.update_dns_type",
 		"press.press.doctype.press_webhook_log.press_webhook_log.clean_logs_older_than_24_hours",
+		"press.press.doctype.virtual_disk_snapshot.virtual_disk_snapshot.sync_all_snapshots_from_aws",
 	],
 	"hourly": [
 		"press.press.doctype.site.backups.cleanup_local",
@@ -231,6 +233,9 @@ scheduler_events = {
 		"0 4 * * *": [
 			"press.press.doctype.site.backups.cleanup_offsite",
 			"press.press.cleanup.unlink_remote_files_from_site",
+		],
+		"10 0 * * *": [
+			"press.press.audit.check_backup_records",
 		],
 		"0 3 * * *": [
 			"press.press.doctype.drip_email.drip_email.send_drip_emails",
@@ -285,8 +290,9 @@ scheduler_events = {
 		"0 0 1 */3 *": ["press.press.doctype.backup_restoration_test.backup_test.run_backup_restore_test"],
 		"0 8 * * *": [
 			"press.press.doctype.aws_savings_plan_recommendation.aws_savings_plan_recommendation.create",
+			"press.press.cleanup.reset_large_output_fields_from_ansible_tasks",
 		],
-		"0 9 * * *": [
+		"0 21 * * *": [
 			"press.press.audit.billing_audit",
 			"press.press.audit.partner_billing_audit",
 		],
@@ -350,3 +356,61 @@ auth_hooks = ["press.auth.hook"]
 page_renderer = ["press.metrics.MetricsRenderer"]
 
 export_python_type_annotations = True
+
+
+# These are used for some business logic, they should be manually evicted.
+__persistent_cache_keys = [
+	"agent-jobs",
+	"monitor-transactions",
+	"google_oauth_flow*",
+	"fc_oauth_state*",
+	"one_time_login_key*",
+	"press-auth-logs",
+]
+
+# `frappe.rename_doc` erases all caches, this hook preserves some of them.
+# Note:
+# - These are only "most used" cache keys. This lessens the impact of renames but doesn't eliminate them.
+# - Adding more keys here will slow down `frappe.clear_cache` but it's "rare" enough.
+# - This also means that other "valid" frappe.clear_cache() usage won't clear these keys!
+# - Use frappe.cache.flushall() instead.
+persistent_cache_keys = [
+	*__persistent_cache_keys,
+	"agent_job_step_output",
+	"all_apps",
+	"app_hooks",
+	"assets_json",
+	"assignment_rule_map",
+	"bootinfo",
+	"builder.builder*",  # path resolution, it has its own cache eviction.
+	"db_tables",
+	"defaults",
+	"doctype_form_meta",
+	"doctype_meta",
+	"doctypes_with_web_view",
+	"document_cache::*",
+	"document_naming_rule_map",
+	"domain_restricted_doctypes",
+	"domain_restricted_pages",
+	"energy_point_rule_map",
+	"frappe.utils.scheduler.schedule_jobs_based_on_activity*",  # dormant checks
+	"frappe.website.page_renderers*",  # FW's routing
+	"home_page",
+	"information_schema:counts",
+	"installed_app_modules",
+	"ip_country_map",
+	"is_table",
+	"languages",
+	"last_db_session_update",
+	"marketplace_apps",
+	"merged_translations",
+	"metadata_version",
+	"server_script_map",  # Routing and actual server scripts
+	"session",
+	"table_columns",
+	"website_page",
+	"website_route_rules",
+]
+
+before_migrate = ["press.overrides.before_after_migrate"]
+after_migrate = ["press.overrides.before_after_migrate"]

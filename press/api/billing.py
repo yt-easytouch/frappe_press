@@ -1,8 +1,8 @@
 # Copyright (c) 2020, Frappe Technologies Pvt. Ltd. and Contributors
 # For license information, please see license.txt
+from __future__ import annotations
 
 from itertools import groupby
-from typing import Dict, List
 
 import frappe
 from frappe.core.utils import find
@@ -65,8 +65,7 @@ def past_invoices():
 @frappe.whitelist()
 def invoices_and_payments():
 	team = get_current_team(True)
-	invoices = team.get_past_invoices()
-	return invoices
+	return team.get_past_invoices()
 
 
 @frappe.whitelist()
@@ -84,6 +83,7 @@ def balances():
 			"source": ("in", ("Prepaid Credits", "Transferred Credits", "Free Credits")),
 			"team": team,
 			"docstatus": 1,
+			"type": ("!=", "Partnership Fee"),
 		},
 		limit=1,
 	)
@@ -123,7 +123,7 @@ def balances():
 	return data
 
 
-def get_processed_balance_transactions(transactions: List[Dict]):
+def get_processed_balance_transactions(transactions: list[dict]):
 	"""Cleans up transactions and adjusts ending balances accordingly"""
 
 	cleaned_up_transations = get_cleaned_up_transactions(transactions)
@@ -142,7 +142,7 @@ def get_processed_balance_transactions(transactions: List[Dict]):
 	return list(reversed(processed_balance_transactions))
 
 
-def get_cleaned_up_transactions(transactions: List[Dict]):
+def get_cleaned_up_transactions(transactions: list[dict]):
 	"""Only picks Balance transactions that the users care about"""
 
 	cleaned_up_transations = []
@@ -235,6 +235,33 @@ def create_payment_intent_for_micro_debit(payment_method_name):
 
 
 @frappe.whitelist()
+def create_payment_intent_for_partnership_fees():
+	team = get_current_team(True)
+	press_settings = frappe.get_cached_doc("Press Settings")
+	metadata = {"payment_for": "partnership_fee"}
+	fee_amount = press_settings.partnership_fee_usd
+
+	if team.currency == "INR":
+		fee_amount = press_settings.partnership_fee_inr
+		gst_amount = fee_amount * press_settings.gst_percentage
+		fee_amount += gst_amount
+		metadata.update({"gst": round(gst_amount, 2)})
+
+	stripe = get_stripe()
+	intent = stripe.PaymentIntent.create(
+		amount=int(fee_amount * 100),
+		currency=team.currency.lower(),
+		customer=team.stripe_customer_id,
+		description="Partnership Fee",
+		metadata=metadata,
+	)
+	return {
+		"client_secret": intent["client_secret"],
+		"publishable_key": get_publishable_key(),
+	}
+
+
+@frappe.whitelist()
 def create_payment_intent_for_buying_credits(amount):
 	team = get_current_team(True)
 	metadata = {"payment_for": "prepaid_credits"}
@@ -309,7 +336,7 @@ def create_payment_intent_for_prepaid_app(amount, metadata):
 				"publishable_key": get_publishable_key(),
 				"client_secret": err.payment_intent.client_secret,
 			}
-		elif err.code:
+		if err.code:
 			# The card was declined for other reasons (e.g. insufficient funds)
 			# Bring the customer back on-session to ask them for a new payment method
 			return {
@@ -328,9 +355,7 @@ def get_payment_methods():
 
 @frappe.whitelist()
 def set_as_default(name):
-	payment_method = frappe.get_doc(
-		"Stripe Payment Method", {"name": name, "team": get_current_team()}
-	)
+	payment_method = frappe.get_doc("Stripe Payment Method", {"name": name, "team": get_current_team()})
 	payment_method.set_default()
 
 
@@ -344,6 +369,7 @@ def remove_payment_method(name):
 
 	payment_method = frappe.get_doc("Stripe Payment Method", {"name": name, "team": team})
 	payment_method.delete()
+	return None
 
 
 @frappe.whitelist()
@@ -362,7 +388,7 @@ def finalize_invoices():
 @frappe.whitelist()
 def unpaid_invoices():
 	team = get_current_team()
-	invoices = frappe.get_all(
+	return frappe.db.get_all(
 		"Invoice",
 		{
 			"team": team,
@@ -373,7 +399,24 @@ def unpaid_invoices():
 		order_by="creation asc",
 	)
 
-	return invoices
+
+@frappe.whitelist()
+def get_unpaid_invoices():
+	team = get_current_team()
+	unpaid_invoices = frappe.db.get_all(
+		"Invoice",
+		{
+			"team": team,
+			"status": "Unpaid",
+			"type": "Subscription",
+		},
+		["name", "status", "period_end", "currency", "amount_due", "total"],
+		order_by="creation asc",
+	)
+
+	if len(unpaid_invoices) == 1:
+		return frappe.get_doc("Invoice", unpaid_invoices[0].name)
+	return unpaid_invoices
 
 
 @frappe.whitelist()
@@ -396,6 +439,7 @@ def change_payment_mode(mode):
 	if team.billing_team and mode != "Paid By Partner":
 		team.billing_team = ""
 	team.save()
+	return None
 
 
 @frappe.whitelist()
@@ -456,7 +500,7 @@ def get_summary():
 	return invoices
 
 
-def get_grouped_invoice_items(invoices: List[str]) -> Dict:
+def get_grouped_invoice_items(invoices: list[str]) -> dict:
 	"""Takes a list of invoices (invoice names) and returns a dict of the form:
 	{ "<invoice_name1>": [<invoice_items>], "<invoice_name2>": [<invoice_items>], }
 	"""
@@ -528,9 +572,7 @@ def validate_gst(address, method=None):
 
 	if address.gstin and address.gstin != "Not Applicable":
 		if not GSTIN_FORMAT.match(address.gstin):
-			frappe.throw(
-				"Invalid GSTIN. The input you've entered does not match the format of GSTIN."
-			)
+			frappe.throw("Invalid GSTIN. The input you've entered does not match the format of GSTIN.")
 
 		tin_code = states_with_tin[address.state]
 		if not address.gstin.startswith(tin_code):
@@ -557,13 +599,11 @@ def get_latest_unpaid_invoice():
 			["amount_due", "payment_mode", "amount_due", "currency"],
 			as_dict=True,
 		)
-		if (
-			unpaid_invoice.payment_mode == "Prepaid Credits"
-			and team_has_balance_for_invoice(unpaid_invoice)
-		):
-			return
+		if unpaid_invoice.payment_mode == "Prepaid Credits" and team_has_balance_for_invoice(unpaid_invoice):
+			return None
 
 		return unpaid_invoice
+	return None
 
 
 def team_has_balance_for_invoice(prepaid_mode_invoice):
@@ -572,7 +612,7 @@ def team_has_balance_for_invoice(prepaid_mode_invoice):
 
 
 @frappe.whitelist()
-def create_razorpay_order(amount):
+def create_razorpay_order(amount, type=None):
 	client = get_razorpay_client()
 	team = get_current_team(get_doc=True)
 
@@ -590,10 +630,12 @@ def create_razorpay_order(amount):
 			"gst": gst_amount if team.currency == "INR" else 0,
 		},
 	}
+	if type and type == "Partnership Fee":
+		data.get("notes").update({"Type": type})
 	order = client.order.create(data=data)
 
 	payment_record = frappe.get_doc(
-		{"doctype": "Razorpay Payment Record", "order_id": order.get("id"), "team": team.name}
+		{"doctype": "Razorpay Payment Record", "order_id": order.get("id"), "team": team.name, "type": type}
 	).insert(ignore_permissions=True)
 
 	return {
@@ -645,7 +687,7 @@ def total_unpaid_amount():
 	return (
 		frappe.get_all(
 			"Invoice",
-			{"status": "Unpaid", "team": team.name, "type": "Subscription"},
+			{"status": "Unpaid", "team": team.name, "type": "Subscription", "docstatus": ("!=", 2)},
 			["sum(amount_due) as total"],
 			pluck="total",
 		)[0]

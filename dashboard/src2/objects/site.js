@@ -15,6 +15,7 @@ import { getRunningJobs } from '../utils/agentJob';
 import { confirmDialog, icon, renderDialog } from '../utils/components';
 import dayjs from '../utils/dayjs';
 import { bytes, date, userCurrency } from '../utils/format';
+import { getToastErrorMessage } from '../utils/toast';
 import { getDocResource } from '../utils/resource';
 import { trialDays } from '../utils/site';
 import { clusterOptions, getUpsellBanner } from './common';
@@ -30,9 +31,6 @@ export default {
 		backup: 'backup',
 		clearSiteCache: 'clear_site_cache',
 		deactivate: 'deactivate',
-		enableDatabaseAccess: 'enable_database_access',
-		disableDatabaseAccess: 'disable_database_access',
-		getDatabaseCredentials: 'get_database_credentials',
 		disableReadWrite: 'disable_read_write',
 		enableReadWrite: 'enable_read_write',
 		installApp: 'install_app',
@@ -85,7 +83,7 @@ export default {
 					type: 'select',
 					label: 'Status',
 					fieldname: 'status',
-					options: ['', 'Active', 'Inactive', 'Suspended', 'Broken']
+					options: ['', 'Active', 'Inactive', 'Suspended', 'Broken', 'Archived']
 				},
 				{
 					type: 'link',
@@ -132,7 +130,7 @@ export default {
 					return value || row.name;
 				}
 			},
-			{ label: 'Status', fieldname: 'status', type: 'Badge', width: 0.6 },
+			{ label: 'Status', fieldname: 'status', type: 'Badge', width: '140px' },
 			{
 				label: 'Plan',
 				fieldname: 'plan',
@@ -141,10 +139,10 @@ export default {
 					if (row.trial_end_date) {
 						return trialDays(row.trial_end_date);
 					}
-					let $team = getTeam();
+					const $team = getTeam();
 					if (row.price_usd > 0) {
-						let india = $team.doc.country == 'India';
-						let formattedValue = userCurrency(
+						const india = $team.doc?.currency === 'INR';
+						const formattedValue = userCurrency(
 							india ? row.price_inr : row.price_usd,
 							0
 						);
@@ -242,6 +240,7 @@ export default {
 				icon: icon('home'),
 				route: 'overview',
 				type: 'Component',
+				condition: site => site.doc?.status !== 'Archived',
 				component: defineAsyncComponent(() =>
 					import('../components/SiteOverview.vue')
 				),
@@ -254,6 +253,7 @@ export default {
 				icon: icon('bar-chart-2'),
 				route: 'insights',
 				type: 'Component',
+				condition: site => site.doc?.status !== 'Archived',
 				redirectTo: 'Site Analytics',
 				childrenRoutes: [
 					'Site Jobs',
@@ -345,6 +345,7 @@ export default {
 				icon: icon('external-link'),
 				route: 'domains',
 				type: 'list',
+				condition: site => site.doc?.status !== 'Archived',
 				list: {
 					doctype: 'Site Domain',
 					fields: ['redirect_to_primary'],
@@ -451,11 +452,7 @@ export default {
 														hide();
 														return 'Domain removed';
 													},
-													error: e => {
-														return e.messages?.length
-															? e.messages.join('\n')
-															: e.message;
-													}
+													error: e => getToastErrorMessage(e)
 												}
 											);
 										}
@@ -481,11 +478,7 @@ export default {
 														hide();
 														return 'Primary domain set';
 													},
-													error: e => {
-														return e.messages?.length
-															? e.messages.join('\n')
-															: e.message;
-													}
+													error: e => getToastErrorMessage(e)
 												}
 											);
 										}
@@ -514,11 +507,7 @@ export default {
 														hide();
 														return 'Domain redirected';
 													},
-													error: e => {
-														return e.messages?.length
-															? e.messages.join('\n')
-															: e.message;
-													}
+													error: e => getToastErrorMessage(e)
 												}
 											);
 										}
@@ -547,11 +536,7 @@ export default {
 														hide();
 														return 'Redirect removed';
 													},
-													error: e => {
-														return e.messages?.length
-															? e.messages.join('\n')
-															: e.message;
-													}
+													error: e => getToastErrorMessage(e)
 												}
 											);
 										}
@@ -762,6 +747,7 @@ export default {
 								items: [
 									{
 										label: 'Restore Backup',
+										condition: () => site.doc.status !== 'Archived',
 										onClick() {
 											confirmDialog({
 												title: 'Restore Backup',
@@ -791,11 +777,7 @@ export default {
 																});
 																return 'Backup restore scheduled successfully.';
 															},
-															error: e => {
-																return e.messages?.length
-																	? e.messages.join('\n')
-																	: e.message;
-															}
+															error: e => getToastErrorMessage(e)
 														}
 													);
 												}
@@ -835,11 +817,7 @@ export default {
 																	});
 																	return 'Backup restore scheduled successfully.';
 																},
-																error: e => {
-																	return e.messages?.length
-																		? e.messages.join('\n')
-																		: e.message;
-																}
+																error: e => getToastErrorMessage(e)
 															}
 														);
 													}
@@ -878,11 +856,7 @@ export default {
 													});
 													return 'Backup scheduled successfully.';
 												},
-												error: e => {
-													return e.messages?.length
-														? e.messages.join('\n')
-														: e.message;
-												}
+												error: e => getToastErrorMessage(e)
 											}
 										);
 									}
@@ -903,6 +877,7 @@ export default {
 				icon: icon('settings'),
 				route: 'site-config',
 				type: 'list',
+				condition: site => site.doc?.status !== 'Archived',
 				list: {
 					doctype: 'Site Config',
 					filters: site => {
@@ -1015,11 +990,7 @@ export default {
 												{
 													loading: 'Deleting config...',
 													success: () => `Config ${row.key} removed`,
-													error: e => {
-														return e.messages?.length
-															? e.messages.join('\n')
-															: e.message;
-													}
+													error: e => getToastErrorMessage(e)
 												}
 											);
 										}
@@ -1035,6 +1006,7 @@ export default {
 				icon: icon('sliders'),
 				route: 'actions',
 				type: 'Component',
+				condition: site => site.doc?.status !== 'Archived',
 				component: SiteActions,
 				props: site => {
 					return { site: site.doc?.name };
@@ -1045,6 +1017,7 @@ export default {
 				icon: icon('arrow-up-circle'),
 				route: 'updates',
 				type: 'list',
+				condition: site => site.doc?.status !== 'Archived',
 				list: {
 					doctype: 'Site Update',
 					filters: site => {
@@ -1118,11 +1091,7 @@ export default {
 														site.reload();
 														return 'Update cancelled';
 													},
-													error: e => {
-														return e.messages?.length
-															? e.messages.join('\n')
-															: e.message;
-													}
+													error: e => getToastErrorMessage(e)
 												}
 											);
 										}
@@ -1302,6 +1271,7 @@ export default {
 				icon: icon('activity'),
 				route: 'activity',
 				type: 'list',
+				condition: site => site.doc?.status !== 'Archived',
 				list: {
 					doctype: 'Site Activity',
 					filters: site => {
@@ -1415,10 +1385,8 @@ export default {
 													toast.success('Email updated successfully');
 												},
 												onError(e) {
-													throw new Error(
-														e.messages
-															? e.messages.join('\n')
-															: e.message || 'Error updating email'
+													toast.error(
+														getToastErrorMessage(e, 'Error updating email')
 													);
 												}
 											}

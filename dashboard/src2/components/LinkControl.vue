@@ -47,6 +47,7 @@ export default {
 					query: this.query
 				},
 				auto: true,
+				initialData: this.options.initialData || [],
 				transform: data => {
 					return data.map(option => ({
 						label: option.label || option.value,
@@ -65,7 +66,7 @@ export default {
 	computed: {
 		autocompleteOptions() {
 			let options = this.$resources.options.data || [];
-			let currentValueInOptions = options.find(
+			const currentValueInOptions = options.find(
 				o => o.value === this.modelValue
 			);
 
@@ -73,9 +74,14 @@ export default {
 				this.currentValidValueInOptions = currentValueInOptions;
 			}
 
-			if (this.modelValue && !currentValueInOptions) {
+			if (
+				this.modelValue &&
+				!currentValueInOptions &&
+				this.currentValidValueInOptions
+			) {
 				options = [this.currentValidValueInOptions, ...options];
 			}
+
 			return options;
 		}
 	}

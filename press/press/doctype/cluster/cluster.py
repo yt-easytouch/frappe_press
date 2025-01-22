@@ -486,9 +486,9 @@ class Cluster(Document):
 		return config
 
 	def set_oci_availability_zone(self):
-		identiy_client = IdentityClient(self.get_oci_config())
-		availibility_domain = identiy_client.list_availability_domains(self.oci_tenancy).data[0].name
-		self.availability_zone = availibility_domain
+		identity_client = IdentityClient(self.get_oci_config())
+		availability_domain = identity_client.list_availability_domains(self.oci_tenancy).data[0].name
+		self.availability_zone = availability_domain
 
 	def provision_on_oci(self):
 		vcn_client = VirtualNetworkClient(self.get_oci_config())
@@ -653,9 +653,9 @@ class Cluster(Document):
 
 		self.save()
 
-	def get_available_vmi(self, series) -> str | None:
+	def get_available_vmi(self, series, platform=None) -> str | None:
 		"""Virtual Machine Image available in region for given series"""
-		return VirtualMachineImage.get_available_for_series(series, self.region)
+		return VirtualMachineImage.get_available_for_series(series, self.region, platform=platform)
 
 	@property
 	def server_doctypes(self):
@@ -740,7 +740,7 @@ class Cluster(Document):
 			)
 
 	def create_vm(
-		self, machine_type: str, disk_size: int, domain: str, series: str, team: str
+		self, machine_type: str, platform: str, disk_size: int, domain: str, series: str, team: str
 	) -> "VirtualMachine":
 		return frappe.get_doc(
 			{
@@ -750,7 +750,7 @@ class Cluster(Document):
 				"series": series,
 				"disk_size": disk_size,
 				"machine_type": machine_type,
-				"virtual_machine_image": self.get_available_vmi(series),
+				"virtual_machine_image": self.get_available_vmi(series, platform=platform),
 				"team": team,
 			},
 		).insert()
@@ -787,7 +787,9 @@ class Cluster(Document):
 		server_series = {**self.base_servers, **self.private_servers}
 		team = team or get_current_team()
 		plan = plan or self.get_or_create_basic_plan(doctype)
-		vm = self.create_vm(plan.instance_type, plan.disk, domain, server_series[doctype], team)
+		vm = self.create_vm(
+			plan.instance_type, plan.platform, plan.disk, domain, server_series[doctype], team
+		)
 		server = None
 		match doctype:
 			case "Database Server":

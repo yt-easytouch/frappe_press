@@ -29,6 +29,11 @@ from press.utils import SupervisorProcess, flatten, log_error, parse_supervisor_
 TRANSITORY_STATES = ["Pending", "Installing"]
 FINAL_STATES = ["Active", "Broken", "Archived"]
 
+MAX_GUNICORN_WORKERS = 36
+MIN_GUNICORN_WORKERS = 2
+MAX_BACKGROUND_WORKERS = 8
+MIN_BACKGROUND_WORKERS = 1
+
 if TYPE_CHECKING:
 	from press.press.doctype.agent_job.agent_job import AgentJob
 	from press.press.doctype.app_source.app_source import AppSource
@@ -513,6 +518,9 @@ class Bench(Document):
 	def get_server_log(self, log):
 		return Agent(self.server).get(f"benches/{self.name}/logs/{log}")
 
+	def get_server_log_for_log_browser(self, log):
+		return Agent(self.server).get(f"benches/{self.name}/logs_v2/{log}")
+
 	@frappe.whitelist()
 	def move_sites(self, server: str):
 		try:
@@ -584,18 +592,29 @@ class Bench(Document):
 				),
 			)[0]
 			self.gunicorn_workers = min(
-				max_gn or 24,
+				max_gn or MAX_GUNICORN_WORKERS,
 				max(
-					min_gn or 2, round(self.workload / server_workload * max_gunicorn_workers)
-				),  # min 2 max 24
+					min_gn or MIN_GUNICORN_WORKERS,
+					round(self.workload / server_workload * max_gunicorn_workers),
+				),  # min 2 max 36
 			)
+			if self.gunicorn_threads_per_worker:
+				# Allocate fewer workers if threaded workers are used
+				# Roughly workers / threads_per_worker = total number of workers
+				# 1. At least one worker
+				# 2. Slightly more workers than required
+				self.gunicorn_workers = frappe.utils.ceil(
+					self.gunicorn_workers / self.gunicorn_threads_per_worker
+				)
 			self.background_workers = min(
-				max_bg or 8,
-				max(min_bg or 1, round(self.workload / server_workload * max_bg_workers)),  # min 1 max 8
+				max_bg or MAX_BACKGROUND_WORKERS,
+				max(
+					min_bg or MIN_BACKGROUND_WORKERS, round(self.workload / server_workload * max_bg_workers)
+				),  # min 1 max 8
 			)
 		except ZeroDivisionError:  # when total_workload is 0
-			self.gunicorn_workers = 2
-			self.background_workers = 1
+			self.gunicorn_workers = MIN_GUNICORN_WORKERS
+			self.background_workers = MIN_BACKGROUND_WORKERS
 		if set_memory_limits:
 			if self.skip_memory_limits:
 				self.memory_max = frappe.db.get_value("Server", self.server, "ram")
@@ -610,7 +629,7 @@ class Bench(Document):
 			self.memory_high = 0
 			self.memory_max = 0
 			self.memory_swap = 0
-		self.save()
+		self.save(ignore_permissions=True)
 		return self.gunicorn_workers, self.background_workers
 
 	def docker_execute(
@@ -1095,8 +1114,10 @@ def archive_obsolete_benches_for_server(benches: Iterable[dict]):
 		# Bench is Broken but a reset to a working state is being attempted
 		if (
 			bench.resetting_bench
-			or bench.last_archive_failure
-			and bench.last_archive_failure > frappe.utils.add_to_date(None, hours=-24)
+			or (
+				bench.last_archive_failure
+				and bench.last_archive_failure > frappe.utils.add_to_date(None, hours=-24)
+			)
 			or get_archive_jobs(bench.name)  # already being archived
 			or get_ongoing_jobs(bench.name)
 			or get_active_site_updates(bench.name)

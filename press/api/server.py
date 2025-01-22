@@ -29,6 +29,9 @@ def poly_get_doc(doctypes, name):
 	return frappe.get_doc(doctypes[-1], name)
 
 
+MOUNTPOINT_REGEX = "(/|/opt/volumes/mariadb|/opt/volumes/benches)"
+
+
 @frappe.whitelist()
 def all(server_filter=None):  # noqa: C901
 	if server_filter is None:
@@ -193,7 +196,7 @@ def usage(name):
 			lambda x: x,
 		),
 		"disk": (
-			f"""(node_filesystem_size_bytes{{instance="{name}", job="node", mountpoint="/"}} - node_filesystem_avail_bytes{{instance="{name}", job="node", mountpoint="/"}}) / (1024 * 1024 * 1024)""",
+			f"""sum(node_filesystem_size_bytes{{instance="{name}", job="node", mountpoint=~"{MOUNTPOINT_REGEX}"}} - node_filesystem_avail_bytes{{instance="{name}", job="node", mountpoint=~"{MOUNTPOINT_REGEX}"}}) by ()/ (1024 * 1024 * 1024)""",
 			lambda x: x,
 		),
 		"memory": (
@@ -218,7 +221,7 @@ def total_resource(name):
 			lambda x: x,
 		),
 		"disk": (
-			f"""(node_filesystem_size_bytes{{instance="{name}", job="node", mountpoint="/"}}) / (1024 * 1024 * 1024)""",
+			f"""sum(node_filesystem_size_bytes{{instance="{name}", job="node", mountpoint=~"{MOUNTPOINT_REGEX}"}}) by () / (1024 * 1024 * 1024)""",
 			lambda x: x,
 		),
 		"memory": (
@@ -273,13 +276,7 @@ def calculate_swap(name):
 @frappe.whitelist()
 @protected(["Server", "Database Server"])
 def analytics(name, query, timezone, duration):
-	timespan, timegrain = {
-		"1 Hour": (60 * 60, 2 * 60),
-		"6 Hour": (6 * 60 * 60, 5 * 60),
-		"24 Hour": (24 * 60 * 60, 30 * 60),
-		"7 Days": (7 * 24 * 60 * 60, 2 * 30 * 60),
-		"15 Days": (15 * 24 * 60 * 60, 3 * 30 * 60),
-	}[duration]
+	timespan, timegrain = get_timespan_timegrain(duration)
 
 	query_map = {
 		"cpu": (
@@ -295,7 +292,7 @@ def analytics(name, query, timezone, duration):
 			lambda x: x["device"],
 		),
 		"space": (
-			f"""100 - ((node_filesystem_avail_bytes{{instance="{name}", job="node", mountpoint="/"}} * 100) / node_filesystem_size_bytes{{instance="{name}", job="node", mountpoint="/"}})""",
+			f"""100 - ((node_filesystem_avail_bytes{{instance="{name}", job="node", mountpoint=~"{MOUNTPOINT_REGEX}"}} * 100) / node_filesystem_size_bytes{{instance="{name}", job="node", mountpoint=~"{MOUNTPOINT_REGEX}"}})""",
 			lambda x: x["mountpoint"],
 		),
 		"loadavg": (
@@ -306,9 +303,65 @@ def analytics(name, query, timezone, duration):
 			f"""node_memory_MemTotal_bytes{{instance="{name}",job="node"}} - node_memory_MemFree_bytes{{instance="{name}",job="node"}} - (node_memory_Cached_bytes{{instance="{name}",job="node"}} + node_memory_Buffers_bytes{{instance="{name}",job="node"}})""",
 			lambda x: "Used",
 		),
+		"database_uptime": (
+			f"""mysql_up{{instance="{name}",job="mariadb"}}""",
+			lambda x: "Uptime",
+		),
+		"database_commands_count": (
+			f"""sum(round(increase(mysql_global_status_commands_total{{instance='{name}', command=~"select|update|insert|delete|begin|commit|rollback"}}[{timegrain}s]))) by (command)""",
+			lambda x: x["command"],
+		),
+		"database_connections": (
+			f"""{{__name__=~"mysql_global_status_threads_connected|mysql_global_variables_max_connections", instance="{name}"}}""",
+			lambda x: "Max Connections"
+			if x["__name__"] == "mysql_global_variables_max_connections"
+			else "Connected Clients",
+		),
+		"innodb_bp_size": (
+			f"""mysql_global_variables_innodb_buffer_pool_size{{instance='{name}'}}""",
+			lambda x: "Buffer Pool Size",
+		),
+		"innodb_bp_size_of_total_ram": (
+			f"""avg by (instance) ((mysql_global_variables_innodb_buffer_pool_size{{instance=~"{name}"}} * 100)) / on (instance) (avg by (instance) (node_memory_MemTotal_bytes{{instance=~"{name}"}}))""",
+			lambda x: "Buffer Pool Size of Total Ram",
+		),
+		"innodb_bp_miss_percent": (
+			f"""
+avg by (instance) (
+        rate(mysql_global_status_innodb_buffer_pool_reads{{instance=~"{name}"}}[{timegrain}s])
+		/
+		rate(mysql_global_status_innodb_buffer_pool_read_requests{{instance=~"{name}"}}[{timegrain}s])
+)
+""",
+			lambda x: "Buffer Pool Miss Percentage",
+		),
+		"innodb_avg_row_lock_time": (
+			f"""(rate(mysql_global_status_innodb_row_lock_time{{instance="{name}"}}[{timegrain}s]) / 1000)/rate(mysql_global_status_innodb_row_lock_waits{{instance="{name}"}}[{timegrain}s])""",
+			lambda x: "Avg Row Lock Time",
+		),
 	}
 
 	return prometheus_query(query_map[query][0], query_map[query][1], timezone, timespan, timegrain)
+
+
+@frappe.whitelist()
+@protected(["Server", "Database Server"])
+def get_request_by_site(name, query, timezone, duration):
+	from press.api.analytics import FilterByResource, get_request_by_
+
+	timespan, timegrain = get_timespan_timegrain(duration)
+
+	return get_request_by_(name, query, timezone, timespan, timegrain, FilterByResource.SERVER)
+
+
+@frappe.whitelist()
+@protected(["Server", "Database Server"])
+def get_slow_logs_by_site(name, query, timezone, duration, normalize=False):
+	from press.api.analytics import FilterByResource, get_slow_logs
+
+	timespan, timegrain = get_timespan_timegrain(duration)
+
+	return get_slow_logs(name, query, timezone, timespan, timegrain, FilterByResource.SERVER, normalize)
 
 
 def prometheus_query(query, function, timezone, timespan, timegrain):
@@ -372,7 +425,7 @@ def options():
 
 
 @frappe.whitelist()
-def plans(name, cluster=None):
+def plans(name, cluster=None, platform="x86_64"):
 	return Plan.get_plans(
 		doctype="Server Plan",
 		fields=[
@@ -387,7 +440,12 @@ def plans(name, cluster=None):
 			"instance_type",
 			"premium",
 		],
-		filters={"server_type": name, "cluster": cluster} if cluster else {"server_type": name},
+		filters={"server_type": name, "platform": platform, "cluster": cluster}
+		if cluster
+		else {
+			"server_type": name,
+			"platform": platform,
+		},
 	)
 
 
@@ -492,3 +550,15 @@ def rename(name, title):
 	doc = poly_get_doc(["Server", "Database Server"], name)
 	doc.title = title
 	doc.save()
+
+
+def get_timespan_timegrain(duration: str) -> tuple[int, int]:
+	timespan, timegrain = {
+		"1 Hour": (60 * 60, 2 * 60),
+		"6 Hour": (6 * 60 * 60, 5 * 60),
+		"24 Hour": (24 * 60 * 60, 30 * 60),
+		"7 Days": (7 * 24 * 60 * 60, 2 * 30 * 60),
+		"15 Days": (15 * 24 * 60 * 60, 3 * 30 * 60),
+	}[duration]
+
+	return timespan, timegrain

@@ -6,7 +6,7 @@ from __future__ import annotations
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import cint, getdate
+from frappe.utils import cint, flt, getdate
 from frappe.utils.data import fmt_money
 
 from press.api.billing import get_stripe
@@ -29,15 +29,14 @@ class Invoice(Document):
 		)
 		from press.press.doctype.invoice_discount.invoice_discount import InvoiceDiscount
 		from press.press.doctype.invoice_item.invoice_item import InvoiceItem
-		from press.press.doctype.invoice_transaction_fee.invoice_transaction_fee import (
-			InvoiceTransactionFee,
-		)
+		from press.press.doctype.invoice_transaction_fee.invoice_transaction_fee import InvoiceTransactionFee
 
 		amended_from: DF.Link | None
 		amount_due: DF.Currency
 		amount_due_with_tax: DF.Currency
 		amount_paid: DF.Currency
 		applied_credits: DF.Currency
+		billing_email: DF.Data | None
 		credit_allocations: DF.Table[InvoiceCreditAllocation]
 		currency: DF.Link | None
 		customer_email: DF.Data | None
@@ -55,6 +54,7 @@ class Invoice(Document):
 		invoice_pdf: DF.Attach | None
 		items: DF.Table[InvoiceItem]
 		marketplace: DF.Check
+		next_payment_attempt_date: DF.Date | None
 		partner_email: DF.Data | None
 		payment_attempt_count: DF.Int
 		payment_attempt_date: DF.Date | None
@@ -66,15 +66,9 @@ class Invoice(Document):
 		razorpay_payment_id: DF.Data | None
 		razorpay_payment_method: DF.Data | None
 		razorpay_payment_record: DF.Link | None
+		refund_reason: DF.Data | None
 		status: DF.Literal[
-			"Draft",
-			"Invoice Created",
-			"Unpaid",
-			"Paid",
-			"Refunded",
-			"Uncollectible",
-			"Collected",
-			"Empty",
+			"Draft", "Invoice Created", "Unpaid", "Paid", "Refunded", "Uncollectible", "Collected", "Empty"
 		]
 		stripe_invoice_id: DF.Data | None
 		stripe_invoice_url: DF.Text | None
@@ -88,7 +82,7 @@ class Invoice(Document):
 		transaction_fee: DF.Currency
 		transaction_fee_details: DF.Table[InvoiceTransactionFee]
 		transaction_net: DF.Currency
-		type: DF.Literal["Subscription", "Prepaid Credits", "Service", "Summary"]
+		type: DF.Literal["Subscription", "Prepaid Credits", "Service", "Summary", "Partnership Fees"]
 		write_off_amount: DF.Float
 	# end: auto-generated types
 
@@ -114,6 +108,7 @@ class Invoice(Document):
 		"total_discount_amount",
 		"invoice_pdf",
 		"stripe_invoice_url",
+		"amount_due_with_tax",
 	)
 
 	@staticmethod
@@ -261,12 +256,22 @@ class Invoice(Document):
 			self.status = "Paid"
 
 		if self.status == "Paid" and self.stripe_invoice_id and self.amount_paid == 0:
-			self.change_stripe_invoice_status("Void")
-			self.add_comment(
-				text=(
-					f"Stripe Invoice {self.stripe_invoice_id} voided because" " payment is done via credits."
+			stripe = get_stripe()
+			invoice = stripe.Invoice.retrieve(self.stripe_invoice_id)
+			payment_intent = stripe.PaymentIntent.retrieve(invoice.payment_intent)
+			if payment_intent.status == "processing":
+				# mark the fc invoice as Paid
+				# if the payment intent is processing, it means the invoice cannot be voided yet
+				# wait for invoice to be updated and then mark it as void if payment failed
+				# or issue a refund if succeeded
+				self.save()  # status is already Paid, so no need to set again
+			else:
+				self.change_stripe_invoice_status("Void")
+				self.add_comment(
+					text=(
+						f"Stripe Invoice {self.stripe_invoice_id} voided because payment is done via credits."
+					)
 				)
-			)
 
 		self.save()
 
@@ -306,7 +311,7 @@ class Invoice(Document):
 		total = 0
 		for item in self.items:
 			total += item.amount
-		self.total = total
+		self.total = flt(total, 2)
 
 	def apply_taxes_if_applicable(self):
 		self.amount_due_with_tax = self.amount_due
@@ -317,11 +322,11 @@ class Invoice(Document):
 
 		if self.currency == "INR" and self.type == "Subscription":
 			gst_rate = frappe.db.get_single_value("Press Settings", "gst_percentage")
-			self.gst = self.amount_due * gst_rate
-			self.amount_due_with_tax = self.amount_due + self.gst
+			self.gst = flt(self.amount_due * gst_rate, 2)
+			self.amount_due_with_tax = flt(self.amount_due + self.gst, 2)
 
 	def calculate_amount_due(self):
-		self.amount_due = self.total - self.applied_credits
+		self.amount_due = flt(self.total - self.applied_credits, 2)
 		if self.amount_due < 0 and self.amount_due > -0.1:
 			self.write_off_amount = self.amount_due
 			self.amount_due = 0
@@ -511,11 +516,23 @@ class Invoice(Document):
 
 	def update_item_descriptions(self):
 		for item in self.items:
-			if not item.description and item.document_type == "Site" and item.plan:
-				site_name = item.document_name.split(".archived")[0]
-				plan = frappe.get_cached_value("Site Plan", item.plan, "plan_title")
+			if not item.description:
 				how_many_days = f"{cint(item.quantity)} day{'s' if item.quantity > 1 else ''}"
-				item.description = f"{site_name} active for {how_many_days} on {plan} plan"
+				if item.document_type == "Site" and item.plan:
+					site_name = item.document_name.split(".archived")[0]
+					plan = frappe.get_cached_value("Site Plan", item.plan, "plan_title")
+					item.description = f"{site_name} active for {how_many_days} on {plan} plan"
+				elif item.document_type in ["Server", "Database Server"]:
+					server_title = frappe.get_cached_value(item.document_type, item.document_name, "title")
+					if item.plan == "Add-on Storage plan":
+						item.description = f"{server_title} Storage Add-on for {how_many_days}"
+					else:
+						item.description = f"{server_title} active for {how_many_days}"
+				elif item.document_type == "Marketplace App":
+					app_title = frappe.get_cached_value("Marketplace App", item.document_name, "title")
+					item.description = f"Marketplace app {app_title} active for {how_many_days}"
+				else:
+					item.description = "Prepaid Credits"
 
 	def add_usage_record(self, usage_record):
 		if self.type != "Subscription":
@@ -597,7 +614,7 @@ class Invoice(Document):
 			if row.quantity == 0:
 				items_to_remove.append(row)
 			else:
-				row.amount = row.quantity * row.rate
+				row.amount = flt((row.quantity * row.rate), 2)
 
 		for item in items_to_remove:
 			self.remove(item)
@@ -621,7 +638,7 @@ class Invoice(Document):
 	def calculate_discounts(self):
 		for item in self.items:
 			if item.discount_percentage:
-				item.discount = item.amount * (item.discount_percentage / 100)
+				item.discount = flt(item.amount * (item.discount_percentage / 100), 2)
 
 		self.total_discount_amount = sum([item.discount for item in self.items]) + sum(
 			[d.amount for d in self.discounts]
@@ -629,7 +646,7 @@ class Invoice(Document):
 		# TODO: handle percent discount from discount table
 
 		self.total_before_discount = self.total
-		self.total = self.total_before_discount - self.total_discount_amount
+		self.total = flt(self.total_before_discount - self.total_discount_amount, 2)
 
 	def on_cancel(self):
 		# make reverse entries for credit allocations
@@ -897,6 +914,7 @@ class Invoice(Document):
 
 		stripe.Refund.create(charge=charge)
 		self.status = "Refunded"
+		self.refund_reason = reason
 		self.save()
 		self.add_comment(text=f"Refund reason: {reason}")
 

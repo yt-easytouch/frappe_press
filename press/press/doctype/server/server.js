@@ -172,7 +172,7 @@ frappe.ui.form.on('Server', {
 				__('Reboot with serial console'),
 				'reboot_with_serial_console',
 				true,
-				frm.doc.virtual_machine,
+				frm.doc.provider === 'AWS EC2',
 			],
 			[
 				__('Enable Public Bench and Site Creation'),
@@ -185,6 +185,18 @@ frappe.ui.form.on('Server', {
 				'disable_server_for_new_benches_and_site',
 				true,
 				frm.doc.virtual_machine,
+			],
+			[
+				__('Set Swappiness and SysRq'),
+				'set_swappiness',
+				false,
+				frm.doc.is_server_setup,
+			],
+			[
+				__('Mount Volumes'),
+				'mount_volumes',
+				true,
+				frm.doc.virtual_machine && frm.doc.mounts,
 			],
 		].forEach(([label, method, confirm, condition]) => {
 			if (typeof condition === 'undefined' || condition) {

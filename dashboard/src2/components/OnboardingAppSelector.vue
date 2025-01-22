@@ -10,11 +10,13 @@
 				<p class="text-lg font-medium leading-snug text-gray-900">
 					{{ app.title }}
 				</p>
-				<p class="line-clamp-2 text-sm tracking-[0.26px] text-gray-700">
+				<p
+					class="line-clamp-2 text-sm leading-5 tracking-[0.26px] text-gray-700"
+				>
 					{{ app.description }}
 				</p>
 			</div>
-			<div class="flex w-fit flex-row text-gray-600">
+			<div class="flex w-fit flex-row gap-1 text-gray-600">
 				<DownloadIcon class="h-3 w-3" />
 				<span class="ml-0.5 text-[12px] leading-3">
 					{{ this.$format.numberK(app.total_installs || '0') }} installs

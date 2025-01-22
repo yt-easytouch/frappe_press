@@ -19,6 +19,7 @@ import { toast } from 'vue-sonner';
 import { renderDialog } from '../../utils/components';
 import router from '../../router';
 import ObjectList from '../ObjectList.vue';
+import { getToastErrorMessage } from '../../utils/toast';
 
 export default {
 	props: {
@@ -75,11 +76,7 @@ export default {
 											this.show = false;
 											return 'App will be installed shortly';
 										},
-										error: e => {
-											return e.messages?.length
-												? e.messages.join('\n')
-												: e.message;
-										}
+										error: e => getToastErrorMessage(e)
 									}
 								);
 							}
@@ -104,9 +101,7 @@ export default {
 								this.show = false;
 								return 'App will be installed shortly';
 							},
-							error: e => {
-								return e.messages?.length ? e.messages.join('\n') : e.message;
-							}
+							error: e => getToastErrorMessage(e)
 						}
 					);
 				}
@@ -125,17 +120,20 @@ export default {
 						label: 'Title',
 						fieldname: 'title',
 						class: 'font-medium',
-						width: 2
+						width: 2,
+						format: (value, row) => value || row.app_title
 					},
 					{
 						label: 'Repo',
 						fieldname: 'repository_owner',
-						class: 'text-gray-600'
+						class: 'text-gray-600',
+						width: '10rem'
 					},
 					{
 						label: 'Branch',
 						fieldname: 'branch',
-						class: 'text-gray-600'
+						class: 'text-gray-600',
+						width: '20rem'
 					},
 					{
 						label: '',

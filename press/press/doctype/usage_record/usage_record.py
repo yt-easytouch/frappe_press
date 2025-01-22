@@ -1,7 +1,6 @@
-# -*- coding: utf-8 -*-
 # Copyright (c) 2020, Frappe and contributors
 # For license information, please see license.txt
-
+from __future__ import annotations
 
 import frappe
 from frappe.model.document import Document
@@ -88,7 +87,6 @@ class UsageRecord(Document):
 				"plan": self.plan,
 				"docstatus": 1,
 				"subscription": self.subscription,
-				"invoice": self.invoice,
 			},
 			pluck="name",
 		)
@@ -112,8 +110,10 @@ def link_unlinked_usage_records():
 			"invoice": ("is", "not set"),
 			"date": ("between", (fd, ld)),
 			"team": ("not in", free_teams),
+			"docstatus": 1,
 		},
 		pluck="name",
+		ignore_ifnull=True,
 	)
 
 	for usage_record in usage_records:
