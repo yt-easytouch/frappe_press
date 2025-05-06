@@ -21,7 +21,7 @@
 					v-if="newDomain && !dnsVerified"
 					class="prose prose-sm space-y-2 prose-strong:text-gray-800"
 				>
-					<p>Create one of the following DNS records:</p>
+					<p>Create one of the following DNS record: *</p>
 					<ul>
 						<li>
 							<strong>CNAME</strong> record from
