@@ -5,11 +5,12 @@
 			class="col-span-1 lg:col-span-2"
 			title="Your sites are on an End of Life version. Upgrade to the latest version to get the latest features and security updates."
 			:id="`${$releaseGroup.name}-eol`"
+			type="gray"
 		>
 			<Button
 				class="ml-auto"
 				variant="outline"
-				link="https://frappecloud.com/docs/sites/version-upgrade"
+				link="https://easytouch.cloud/docs/sites/version-upgrade"
 			>
 				Upgrade Now
 			</Button>
@@ -128,7 +129,7 @@ export default {
 								<Tooltip text="Apps in this bench may have been patched">
 									<a
 										class="ml-2 rounded bg-gray-100 p-1 text-gray-700"
-										href="https://frappecloud.com/docs/benches/app-patches"
+										href="https://easytouch.cloud/docs/benches/app-patches"
 										target="_blank"
 									>
 										<IconHash />
@@ -139,7 +140,7 @@ export default {
 								<Tooltip text="This bench has been updated in place">
 									<a
 										class="ml-2 rounded bg-gray-100 p-1 text-gray-700"
-										href="https://frappecloud.com/docs/in-place-updates"
+										href="https://easytouch.cloud/docs/in-place-updates"
 										target="_blank"
 									>
 										<IconStar />
@@ -355,8 +356,10 @@ export default {
 					label: 'Rebuild Assets',
 					condition: () =>
 						bench.status === 'Active' &&
+						!bench.on_public_server &&
 						(Number(this.$releaseGroup.doc.version.split(' ')[1]) > 13 ||
 							this.$releaseGroup.doc.version === 'Nightly'),
+
 					onClick: () => {
 						confirmDialog({
 							title: 'Rebuild Assets',

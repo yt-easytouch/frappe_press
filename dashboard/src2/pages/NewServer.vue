@@ -102,7 +102,7 @@
 						</h2>
 						<div>
 							<Button
-								link="https://frappecloud.com/pricing#dedicated"
+								link="https://easytouch.cloud/pricing#dedicated"
 								variant="ghost"
 							>
 								<template #prefix>
@@ -313,7 +313,7 @@
 			Or you can
 			<a
 				class="underline"
-				href="https://frappecloud.com/support"
+				href="https://easytouch.cloud/support"
 				target="_blank"
 				>contact support</a
 			>

@@ -530,7 +530,7 @@ def main():
 		atexit.register(cleanup, current_file)
 
 	frappe_provider = click.prompt(
-		"Frappe provider (default: frappecloud.com)", default="frappecloud.com"
+		"Easytouch provider (default: easytouch.cloud)", default="easytouch.cloud"
 	)
 
 	restore_choice = click.prompt(

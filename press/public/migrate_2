@@ -1,6 +1,6 @@
 #!./env/bin/python
-# Fallback Script to run the easy migrate script in place of `bench --site {site} migrate-to frappecloud.com`
-# This file was originally hosted on Easytouch Cloud. For more information, contact us at frappecloud.com
+# Fallback Script to run the easy migrate script in place of `bench --site {site} migrate-to easytouch.cloud`
+# This file was originally hosted on Easytouch Cloud. For more information, contact us at easytouch.cloud
 # Copyright (c) 2020, Frappe Technologies Pvt. Ltd.
 
 import os
@@ -13,7 +13,7 @@ import requests
 
 def frappecloud_migrator():
 	print("Retreiving Site Migrator...")
-	remote_site = "frappecloud.com"
+	remote_site = "easytouch.cloud"
 	request_url = "https://{}/api/method/press.api.script_2".format(remote_site)
 	request = requests.get(request_url)
 

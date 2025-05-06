@@ -77,7 +77,7 @@
 					<p class="text-sm">
 						Please check out the
 						<a
-							href="https://frappecloud.com/docs/database-users-and-permission-manager#faq"
+							href="https://easytouch.cloud/docs/database-users-and-permission-manager#faq"
 							target="_blank"
 							class="underline"
 							>documentation</a

@@ -21,7 +21,7 @@
 					v-if="newDomain && !dnsVerified"
 					class="prose prose-sm space-y-2 prose-strong:text-gray-800"
 				>
-					<p>Create one of the following DNS records:</p>
+					<p>Create one of the following DNS record: *</p>
 					<ul>
 						<li>
 							<strong>CNAME</strong> record from
@@ -34,6 +34,15 @@
 							<strong>{{ newDomain }}</strong>
 							to
 							<strong>{{ site.inbound_ip }}</strong>
+						</li>
+					</ul>
+					<p>Create the following CNAME DNS record to verify your domain:</p>
+					<ul>
+						<li>
+							<strong>CNAME</strong> from
+							<strong>_acme-challenge.{{ newDomain }}</strong>
+							to
+							<strong>_acme-challenge.easytouch.cloud</strong>
 						</li>
 					</ul>
 				</div>

@@ -1,6 +1,6 @@
 ## Press SaaS API
 
-These APIs has been introduced with the release of SaaS v2. It will provide a interface to communicate back to Frappe Cloud from deployed site.
+These APIs has been introduced with the release of SaaS v2. It will provide a interface to communicate back to Easytouch Cloud from deployed site.
 
 
 ### Authentication using secret token
@@ -21,7 +21,7 @@ X-Site-Token: 319f41d07d430ed77df3d41a82787f4edff1440f12e43784a7ce8b4e
 
 **Why ?**
 
-Sometimes, we may need to pass the secret token to frontend for some specific tasks (example - in-desk checkout). In those case, instead of using our authentication secret token, we can generate a temporary access token from frappe cloud and use that for the session.
+Sometimes, we may need to pass the secret token to frontend for some specific tasks (example - in-desk checkout). In those case, instead of using our authentication secret token, we can generate a temporary access token from Easytouch Cloud and use that for the session.
 
 > Note: Generated access tokens are **valid for 15 minutes**.
 
@@ -43,7 +43,7 @@ curl --location --request POST 'http://fc.local:8000/api/method/press.saas.api.a
 }
 ```
 
-After we generated our access token, set this specific header to any saas api requests to frappe cloud.
+After we generated our access token, set this specific header to any saas api requests to Easytouch Cloud.
 ```
 X-Site-Access-Token: fbk23eva6k:3e2882eff23d4145ddfefaebf5ac6135
 ```

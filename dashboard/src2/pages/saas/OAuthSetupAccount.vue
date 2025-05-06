@@ -49,15 +49,15 @@
 									class="mr-0.5 py-1 align-baseline"
 								/>
 								I agree to Frappe&nbsp;
-								<Link href="https://frappecloud.com/terms" target="_blank">
+								<Link href="https://easytouch.cloud/terms" target="_blank">
 									Terms of Service </Link
 								>,&nbsp;
-								<Link href="https://frappecloud.com/privacy" target="_blank">
+								<Link href="https://easytouch.cloud/privacy" target="_blank">
 									Privacy Policy
 								</Link>
 								&nbsp;&&nbsp;
 								<Link
-									href="https://frappecloud.com/cookie-policy"
+									href="https://easytouch.cloud/cookie-policy"
 									target="_blank"
 								>
 									Cookie Policy

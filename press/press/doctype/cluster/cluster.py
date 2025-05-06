@@ -188,7 +188,7 @@ class Cluster(Document):
 
 			# Create the network (VPC) on Hetzner
 			network = client.networks.create(
-				name=f"Frappe Cloud - {self.name}",
+				name=f"Easytouch Cloud - {self.name}",
 				ip_range=self.cidr_block,  # The IP range for the entire network (CIDR)
 				subnets=subnets,
 				routes=[],

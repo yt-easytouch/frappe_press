@@ -461,7 +461,7 @@ export default {
 					condition: () => app.doc.status === 'Draft',
 					onClick() {
 						window.open(
-							'https://frappecloud.com/docs/marketplace/marketplace-guidelines',
+							'https://easytouch.cloud/docs/marketplace/marketplace-guidelines',
 							'_blank'
 						);
 					}

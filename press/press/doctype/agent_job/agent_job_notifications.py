@@ -15,7 +15,7 @@ be handled by the user.
 Based on https://github.com/frappe/press/pull/1544
 
 To handle an error:
-1. Create a doc page that helps the user get out of it under: frappecloud.com/docs/common-issues
+1. Create a doc page that helps the user get out of it under: easytouch.cloud/docs/common-issues
 2. Check if the error is the known/expected one in `get_details`.
 3. Update the details object with the correct values.
 """
@@ -63,13 +63,13 @@ class JobErr(Enum):
 
 
 DOC_URLS = {
-	JobErr.OOM: "https://frappecloud.com/docs/common-issues/oom-issues",
-	JobErr.ROW_SIZE_TOO_LARGE: "https://frappecloud.com/docs/faq/site#row-size-too-large-error-on-migrate",
-	JobErr.DATA_TRUNCATED_FOR_COLUMN: "https://frappecloud.com/docs/faq/site#data-truncated-for-column",
+	JobErr.OOM: "https://easytouch.cloud/docs/common-issues/oom-issues",
+	JobErr.ROW_SIZE_TOO_LARGE: "https://easytouch.cloud/docs/faq/site#row-size-too-large-error-on-migrate",
+	JobErr.DATA_TRUNCATED_FOR_COLUMN: "https://easytouch.cloud/docs/faq/site#data-truncated-for-column",
 	JobErr.BROKEN_PIPE_ERR: None,
-	JobErr.CANT_CONNECT_TO_MYSQL: "https://frappecloud.com/docs/cant-connect-to-mysql-server",
-	JobErr.GZIP_TAR_ERR: "https://frappecloud.com/docs/sites/migrate-an-existing-site#tar-gzip-command-fails-with-unexpected-eof",
-	JobErr.UNKNOWN_COMMAND_HYPHEN: "https://frappecloud.com/docs/unknown-command-",
+	JobErr.CANT_CONNECT_TO_MYSQL: "https://easytouch.cloud/docs/cant-connect-to-mysql-server",
+	JobErr.GZIP_TAR_ERR: "https://easytouch.cloud/docs/sites/migrate-an-existing-site#tar-gzip-command-fails-with-unexpected-eof",
+	JobErr.UNKNOWN_COMMAND_HYPHEN: "https://easytouch.cloud/docs/unknown-command-",
 }
 
 

@@ -76,8 +76,8 @@ echo "0 0,12 * * * root /opt/certbot/bin/python -c 'import random; import time; 
 
 Reference: https://certbot.eff.org/instructions?ws=nginx&os=ubuntufocal
 
-#### Add frankfurter to blocked subdomains on FrappeCloud.com
-https://frappecloud.com/app/blocked-domain/frankfurter
+#### Add frankfurter to blocked subdomains on easytouch.cloud
+https://easytouch.cloud/app/blocked-domain/frankfurter
 
 ### Done
 ```sh
