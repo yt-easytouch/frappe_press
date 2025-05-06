@@ -1799,7 +1799,7 @@ class Site(Document, TagHelpers):
 			"doctype": "Webhook",
 			"webhook_doctype": "User",
 			"enabled": 1,
-			"request_url": "https://frappecloud.com/api/method/press.api.site_login.sync_product_site_user",
+			"request_url": "https://easytouch.cloud/api/method/press.api.site_login.sync_product_site_user",
 			"request_method": "POST",
 			"request_structure": "JSON",
 			"webhook_json": """{ "user_info": { "email": "{{doc.email}}", "enabled": "{{doc.enabled}}" } }""",
@@ -2041,7 +2041,7 @@ class Site(Document, TagHelpers):
 
 	def delete_multiple_config(self, keys: list[str]):
 		# relies on self._keys_removed_in_last_update in self.validate
-		# used by https://frappecloud.com/app/marketplace-app/email_delivery_service
+		# used by https://easytouch.cloud/app/marketplace-app/email_delivery_service
 		config_list: list[dict] = []
 		for key in self.configuration:
 			config = {}

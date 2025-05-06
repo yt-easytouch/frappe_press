@@ -5,7 +5,7 @@ title: Build a Bench
 # Build a Bench
 
 This is information about doctypes required to manage benches and apps on FC
-from [desk](https://frappecloud.com/app). Roughly, the build process goes
+from [desk](https://easytouch.cloud/app). Roughly, the build process goes
 through these doctypes (that you're concerned with) in order.
 
 App => App Source => Release Group => Deploy Candidate => Bench

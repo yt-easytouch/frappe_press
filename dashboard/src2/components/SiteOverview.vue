@@ -51,7 +51,7 @@
 				!$site.doc.current_plan?.is_trial_plan
 			"
 			class="col-span-1 lg:col-span-2"
-			title="Your site is currently on a shared bench group. Upgrade plan to enjoy <a href='https://frappecloud.com/shared-hosting#benches' class='underline' target='_blank'>more benefits</a>."
+			title="Your site is currently on a shared bench group. Upgrade plan to enjoy <a href='https://easytouch.cloud/shared-hosting#benches' class='underline' target='_blank'>more benefits</a>."
 			:id="$site.name"
 			type="gray"
 		>
@@ -178,7 +178,7 @@
 									: 0) >= 80
 							"
 							variant="ghost"
-							link="https://frappecloud.com/docs/faq/site#what-is-using-up-all-my-database-size"
+							link="https://easytouch.cloud/docs/faq/site#what-is-using-up-all-my-database-size"
 							icon="help-circle"
 						/>
 					</div>

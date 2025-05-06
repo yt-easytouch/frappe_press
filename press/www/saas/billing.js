@@ -1,4 +1,4 @@
-const frappe_cloud_base_endpoint = 'https://frappecloud.com';
+const frappe_cloud_base_endpoint = 'https://easytouch.cloud';
 
 function calculate_trial_end_days() {
 	// try to check for trial_end_date in frappe.boot.subscription_conf

@@ -58,7 +58,7 @@
 							/>
 							The Github Repository is private.
 							<Link
-								href="https://frappecloud.com/marketplace/terms"
+								href="https://easytouch.cloud/marketplace/terms"
 								class="font-medium"
 							>
 								Terms and Policy

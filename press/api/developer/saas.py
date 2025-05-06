@@ -222,7 +222,7 @@ def is_user_logged_in(user):
 def check_if_user_can_login(team_info, site_info):
 	if team_info.get("enforce_2fa"):
 		frappe.throw(
-			"Sorry, you cannot login with this method as 2FA is enabled. Please visit https://frappecloud.com/dashboard to login."
+			"Sorry, you cannot login with this method as 2FA is enabled. Please visit https://easytouch.cloud/dashboard to login."
 		)
 	if (
 		team_info.get("user") == "Administrator"

@@ -94,7 +94,7 @@
 									I accept the
 									<Link
 										class="!text-gray-700"
-										href="https://frappecloud.com/policies"
+										href="https://easytouch.cloud/policies"
 										target="_blank"
 									>
 										Terms and Policies

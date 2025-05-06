@@ -95,11 +95,11 @@ export default {
 	},
 	methods: {
 		support() {
-			window.open('https://frappecloud.com/support', '_blank');
+			window.open('https://easytouch.cloud/support', '_blank');
 		},
 		feedback() {
 			window.open(
-				'https://frappecloud.com/frappe-cloud-feedback/new',
+				'https://easytouch.cloud/frappe-cloud-feedback/new',
 				'_blank'
 			);
 		}

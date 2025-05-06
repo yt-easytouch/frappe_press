@@ -17,7 +17,7 @@
 <div align="center">
 	<a href="https://frappe.io/press">Website</a>
 	-
-	<a href="https://frappecloud.com/docs/">Documentation</a>
+	<a href="https://easytouch.cloud/docs/">Documentation</a>
 </div>
 
 ## Press
@@ -66,13 +66,13 @@ Additionally, customers lacked full control over their servers—no SSH access, 
 
 ## Setup
 
-To self host or to setup Press locally follow the steps in the [Local Development Environment Setup Guide](https://frappecloud.com/docs/local-fc-setup) or [this YouTube video](https://www.youtube.com/watch?v=Xb9QHnUrIEk)
+To self host or to setup Press locally follow the steps in the [Local Development Environment Setup Guide](https://easytouch.cloud/docs/local-fc-setup) or [this YouTube video](https://www.youtube.com/watch?v=Xb9QHnUrIEk)
 
 ## Learn and connect
 
 - [Telegram Public Group](https://t.me/frappecloud)
 - [Discuss Forum](https://discuss.frappe.io/c/frappe-cloud/77)
-- [Documentation](https://frappecloud.com/docs)
+- [Documentation](https://easytouch.cloud/docs)
 
 <br/>
 <br/>

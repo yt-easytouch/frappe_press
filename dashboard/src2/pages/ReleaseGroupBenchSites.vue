@@ -10,7 +10,7 @@
 			<Button
 				class="ml-auto"
 				variant="outline"
-				link="https://frappecloud.com/docs/sites/version-upgrade"
+				link="https://easytouch.cloud/docs/sites/version-upgrade"
 			>
 				Upgrade Now
 			</Button>
@@ -129,7 +129,7 @@ export default {
 								<Tooltip text="Apps in this bench may have been patched">
 									<a
 										class="ml-2 rounded bg-gray-100 p-1 text-gray-700"
-										href="https://frappecloud.com/docs/benches/app-patches"
+										href="https://easytouch.cloud/docs/benches/app-patches"
 										target="_blank"
 									>
 										<IconHash />
@@ -140,7 +140,7 @@ export default {
 								<Tooltip text="This bench has been updated in place">
 									<a
 										class="ml-2 rounded bg-gray-100 p-1 text-gray-700"
-										href="https://frappecloud.com/docs/in-place-updates"
+										href="https://easytouch.cloud/docs/in-place-updates"
 										target="_blank"
 									>
 										<IconStar />

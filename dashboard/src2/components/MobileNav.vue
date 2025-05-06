@@ -80,6 +80,6 @@ const SwitchTeamDialog2 = defineAsyncComponent(() =>
 const showTeamSwitcher = ref(false);
 
 function support() {
-	window.open('https://frappecloud.com/support', '_blank');
+	window.open('https://easytouch.cloud/support', '_blank');
 }
 </script>

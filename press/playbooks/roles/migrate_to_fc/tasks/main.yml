@@ -6,7 +6,7 @@
 
 - name: Get migrate script
   get_url:
-    url: https://frappecloud.com/assets/press/migrate_2
+    url: https://easytouch.cloud/assets/press/migrate_2
     dest: '/home/frappe/benches/{{ bench }}/migrate_2'
     validate_certs: no
 

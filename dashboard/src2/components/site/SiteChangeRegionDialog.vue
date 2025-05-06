@@ -71,7 +71,7 @@
 						<strong>A record</strong>. Please update the same after migration to
 						avoid downtime. To know more, refer
 						<a
-							href="https://frappecloud.com/docs/sites/custom-domains"
+							href="https://easytouch.cloud/docs/sites/custom-domains"
 							target="_blank"
 							class="underline"
 							>the documentation.</a

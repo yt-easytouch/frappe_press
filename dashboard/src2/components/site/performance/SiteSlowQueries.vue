@@ -37,7 +37,7 @@ export default {
 		slowQueriesOptions() {
 			return {
 				experimental: true,
-				documentation: 'https://frappecloud.com/docs/performance-tuning',
+				documentation: 'https://easytouch.cloud/docs/performance-tuning',
 				data: () => this.$resources.slowQueries.data.data,
 				onRowClick: row => {
 					this.selectedQuery = row.query;

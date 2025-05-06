@@ -107,7 +107,7 @@ def callback(code=None, state=None):  # noqa: C901
 
 def invalid_login():
 	frappe.local.response["http_status_code"] = 401
-	return "Invalid state parameter. The session timed out. Please try again or contact  Easytouch Cloud support at https://frappecloud.com/support"
+	return "Invalid state parameter. The session timed out. Please try again or contact  Easytouch Cloud support at https://easytouch.cloud/support"
 
 
 def google_oauth_flow():

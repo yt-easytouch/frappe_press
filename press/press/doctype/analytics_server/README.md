@@ -1,4 +1,4 @@
-Added following locations to NGINX config on frappecloud.com
+Added following locations to NGINX config on easytouch.cloud
 
 Some adblockers don't seem to like third party domains and "plausible.js"
 

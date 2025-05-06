@@ -22,7 +22,7 @@ be handled by the user.
 Ref: https://github.com/frappe/press/pull/1544
 
 To handle an error:
-1. Create a doc page that helps the user get out of it under: frappecloud.com/docs/common-issues
+1. Create a doc page that helps the user get out of it under: easytouch.cloud/docs/common-issues
 2. Check if the error is the known/expected one in `get_details`.
 3. Update the details object with the correct values.
 """
@@ -70,14 +70,14 @@ if typing.TYPE_CHECKING:
 
 
 DOC_URLS = {
-	"app-installation-issue": "https://frappecloud.com/docs/faq/app-installation-issue",
-	"invalid-pyproject-file": "https://frappecloud.com/docs/common-issues/invalid-pyprojecttoml-file",
-	"incompatible-node-version": "https://frappecloud.com/docs/common-issues/incompatible-node-version",
-	"incompatible-dependency-version": "https://frappecloud.com/docs/common-issues/incompatible-dependency-version",
-	"incompatible-app-version": "https://frappecloud.com/docs/common-issues/incompatible-app-version",
-	"required-app-not-found": "https://frappecloud.com/docs/common-issues/required-app-not-found",
-	"debugging-app-installs-locally": "https://frappecloud.com/docs/common-issues/debugging-app-installs-locally",
-	"vite-not-found": "https://frappecloud.com/docs/common-issues/vite-not-found",
+	"app-installation-issue": "https://easytouch.cloud/docs/faq/app-installation-issue",
+	"invalid-pyproject-file": "https://easytouch.cloud/docs/common-issues/invalid-pyprojecttoml-file",
+	"incompatible-node-version": "https://easytouch.cloud/docs/common-issues/incompatible-node-version",
+	"incompatible-dependency-version": "https://easytouch.cloud/docs/common-issues/incompatible-dependency-version",
+	"incompatible-app-version": "https://easytouch.cloud/docs/common-issues/incompatible-app-version",
+	"required-app-not-found": "https://easytouch.cloud/docs/common-issues/required-app-not-found",
+	"debugging-app-installs-locally": "https://easytouch.cloud/docs/common-issues/debugging-app-installs-locally",
+	"vite-not-found": "https://easytouch.cloud/docs/common-issues/vite-not-found",
 }
 
 

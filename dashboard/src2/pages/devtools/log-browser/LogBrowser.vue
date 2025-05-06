@@ -86,7 +86,7 @@
 						</div>
 					</Tooltip>
 					<Button
-						link="https://frappecloud.com/docs/devtools/log-browser"
+						link="https://easytouch.cloud/docs/devtools/log-browser"
 						target="_blank"
 					>
 						<i-lucide-help-circle class="h-4 w-4" />

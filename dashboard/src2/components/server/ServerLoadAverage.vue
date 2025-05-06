@@ -6,7 +6,7 @@
 				<Button
 					icon="help-circle"
 					variant="ghost"
-					:link="'https://frappecloud.com/docs/server-analytics#load-average'"
+					:link="'https://easytouch.cloud/docs/server-analytics#load-average'"
 				/>
 				<router-link
 					class="text-base text-gray-600 hover:text-gray-700"
