@@ -36,6 +36,15 @@
 							<strong>{{ site.inbound_ip }}</strong>
 						</li>
 					</ul>
+					<p>Create the following CNAME DNS record to verify your domain:</p>
+					<ul>
+						<li>
+							<strong>CNAME</strong> from
+							<strong>_acme-challenge.{{ newDomain }}</strong>
+							to
+							<strong>_acme-challenge.easytouch.cloud</strong>
+						</li>
+					</ul>
 				</div>
 				<div v-if="dnsResult && !dnsResult.matched" class="space-y-2">
 					<p class="text-base">

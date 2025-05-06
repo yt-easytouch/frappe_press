@@ -14,7 +14,11 @@ export default defineConfig({
 		vue(),
 		vueJsx(),
 		pluginRewriteAll(),
-		frappeui(),
+		frappeui({
+			buildConfig: {
+			  indexHtmlPath: 'index.html'  // 👈 REQUIRED now
+			}
+		  }),
 		Components({
 			dirs: [
 				'src/components',

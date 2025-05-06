@@ -44,7 +44,7 @@ class TLSCertificate(Document):
 		intermediate_chain: DF.Code | None
 		issued_on: DF.Datetime | None
 		private_key: DF.Code | None
-		provider: DF.Literal["Let's Encrypt", "Other"]
+		provider: DF.Literal["Let's Encrypt", "ScmeSH", "Other"]
 		retry_count: DF.Int
 		rsa_key_size: DF.Literal["2048", "3072", "4096"]
 		status: DF.Literal["Pending", "Active", "Expired", "Revoked", "Failure"]
@@ -498,8 +498,10 @@ class ScmeSH(BaseCA):
         if not bearer_token:
             raise frappe.ValidationError("Bearer token for 20i DNS is not configured in Press Settings.")
         
-        plugin = f"--dns dns_20i --bearer {bearer_token} " if self.wildcard else f"--webroot --webroot-path {self.settings.webroot_directory}"
+        #plugin = f"--dns dns_20i --bearer {bearer_token} " if self.wildcard else f"--webroot --webroot-path {self.settings.webroot_directory}"
+        plugin = f"--dns dns_20i --bearer {bearer_token} "
         staging = "--staging" if frappe.conf.developer_mode else ""
+        challenge_alias = f"--challenge-alias {self.settings.challenge_alias}" if self.settings.challenge_alias else ""
         force_renewal = "--force"
         
         acme_sh_path = "/usr/local/acme.sh/acme.sh"
@@ -508,7 +510,8 @@ class ScmeSH(BaseCA):
             f"--keylength {self.rsa_key_size} "
             f"-d {self.domain} "
             f"--home {acme_home} "
-            f"--accountemail {self.settings.eff_registration_email}"
+            f"--accountemail {self.settings.eff_registration_email} "
+            f"{challenge_alias}"
         )
 
         try:

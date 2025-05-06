@@ -50,8 +50,7 @@
    "fieldname": "decoded_certificate",
    "fieldtype": "Code",
    "label": "Decoded Certificate",
-   "read_only": 1,
-   "read_only_depends_on": "eval: doc.provider === \"Let's Encrypt\""
+   "read_only": 1
   },
   {
    "fieldname": "status",
@@ -107,21 +106,21 @@
    "fieldtype": "Code",
    "label": "Certificate",
    "read_only": 1,
-   "read_only_depends_on": "eval: doc.provider === \"Let's Encrypt\""
+   "read_only_depends_on": "eval: doc.provider != \"Other\""
   },
   {
    "fieldname": "full_chain",
    "fieldtype": "Code",
    "label": "Full Chain",
    "read_only": 1,
-   "read_only_depends_on": "eval: doc.provider == \"Let's Encrypt\""
+   "read_only_depends_on": "eval: doc.provider != \"Other\""
   },
   {
    "fieldname": "intermediate_chain",
    "fieldtype": "Code",
    "label": "Intermediate Chain",
    "read_only": 1,
-   "read_only_depends_on": "eval: doc.provider === \"Let's Encrypt\""
+   "read_only_depends_on": "eval: doc.provider != \"Other\""
   },
   {
    "depends_on": "eval: doc.provider !== \"Let's Encrypt\"",
@@ -130,7 +129,7 @@
    "fieldtype": "Code",
    "label": "Private Key",
    "read_only": 1,
-   "read_only_depends_on": "eval: doc.provider === \"Let's Encrypt\""
+   "read_only_depends_on": "eval: doc.provider != \"Other\""
   },
   {
    "fieldname": "team",
@@ -162,14 +161,13 @@
    "fieldname": "provider",
    "fieldtype": "Select",
    "label": "Provider",
-   "options": "Let's Encrypt\nOther",
+   "options": "Let's Encrypt\nScmeSH\nOther",
    "reqd": 1
   }
  ],
- "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-03-30 18:03:13.270000",
+ "modified": "2025-05-06 11:37:27.937098",
  "modified_by": "Administrator",
  "module": "Press",
  "name": "TLS Certificate",
@@ -202,7 +200,6 @@
    "write": 1
   }
  ],
- "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],

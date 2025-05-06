@@ -199,6 +199,7 @@
   "dns_20i_bearer",
   "column_break_15",
   "eff_registration_email",
+  "challenge_alias",
   "use_staging_ca",
   "ssh_section",
   "ssh_certificate_authority",
@@ -989,6 +990,12 @@
    "label": "EFF Registration Email",
    "reqd": 1
   },
+  {
+    "fieldname": "challenge_alias",
+    "fieldtype": "Data",
+    "label": "Challenge Alias",
+    "reqd": 0
+   },
   {
    "default": "0",
    "fieldname": "use_staging_ca",

@@ -178,7 +178,7 @@ class PressSettings(Document):
 	)
 
 	def validate(self):
-		if self.max_concurrent_physical_restorations > 5:
+		if (self.max_concurrent_physical_restorations or 0) > 5:
 			frappe.throw("Max Concurrent Physical Restorations should be less than 5")
 
 		if self.send_email_notifications:
