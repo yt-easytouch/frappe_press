@@ -24,7 +24,7 @@
 					{{
 						invitedBy
 							? 'Invitation to join'
-							: 'Set up your Frappe Cloud account'
+							: 'Set up your Easytouch Cloud account'
 					}}
 				</div>
 				<div class="mt-2 text-center text-sm text-gray-600" v-if="invitedBy">
@@ -121,7 +121,7 @@
 					<div
 						class="mt-2 flex w-full items-center justify-center text-sm text-gray-600"
 					>
-						Powered by Frappe Cloud
+						Powered by Easytouch Cloud
 					</div>
 				</template>
 			</LoginBox>

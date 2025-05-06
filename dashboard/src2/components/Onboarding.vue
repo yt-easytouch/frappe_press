@@ -47,7 +47,7 @@
 				</div>
 				<div class="mt-2 pl-7" v-if="pendingSiteRequest.status == 'Error'">
 					<p class="mt-2 text-p-base text-gray-800">
-						Please contact Frappe Cloud support by clicking on the button below.
+						Please contact Easytouch Cloud support by clicking on the button below.
 					</p>
 					<Button class="mt-2" link="/support"> Contact Support </Button>
 				</div>

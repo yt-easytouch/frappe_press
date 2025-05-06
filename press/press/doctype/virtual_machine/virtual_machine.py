@@ -1319,7 +1319,7 @@ class VirtualMachine(Document):
 			"TagSpecifications": [
 				{
 					"ResourceType": "volume",
-					"Tags": [{"Key": "Name", "Value": f"Frappe Cloud - {self.name}"}],
+					"Tags": [{"Key": "Name", "Value": f"Easytouch Cloud - {self.name}"}],
 				},
 			],
 		}

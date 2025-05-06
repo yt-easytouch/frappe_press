@@ -1142,7 +1142,7 @@ def create_sales_invoice_on_external_site(transaction_response):
 			"due_date": frappe.utils.add_days(frappe.utils.nowdate(), 30),
 			"items": [
 				{
-					"item_code": "Frappe Cloud Payment",
+					"item_code": "Easytouch Cloud Payment",
 					"qty": 1,
 					"rate": transaction_response.get("Amount"),
 					"description": "Payment for Mpesa transaction",

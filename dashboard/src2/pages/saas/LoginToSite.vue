@@ -50,7 +50,7 @@
 					<div
 						class="mt-2 flex w-full items-center justify-center text-sm text-gray-600"
 					>
-						Powered by Frappe Cloud
+						Powered by Easytouch Cloud
 					</div>
 				</template>
 			</LoginBox>
@@ -93,7 +93,7 @@
 					<div
 						class="mt-2 flex w-full items-center justify-center text-sm text-gray-600"
 					>
-						Powered by Frappe Cloud
+						Powered by Easytouch Cloud
 					</div>
 				</template>
 			</LoginBox>
@@ -132,7 +132,7 @@
 					<div
 						class="mt-2 flex w-full items-center justify-center text-sm text-gray-600"
 					>
-						Powered by Frappe Cloud
+						Powered by Easytouch Cloud
 					</div>
 				</template>
 			</LoginBox>

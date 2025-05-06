@@ -3,7 +3,7 @@
 <img src="https://frappe.io/files/Group%202%20(1).png" alt="Press logo" width="80"/>
 <h1>Press</h1>
 
-**Full Service Cloud Hosting For The Frappe Stack - Powers Frappe Cloud**
+**Full Service Cloud Hosting For The Frappe Stack - Powers Easytouch Cloud**
 
 [![codecov](https://codecov.io/gh/frappe/press/branch/master/graph/badge.svg?token=0puvH0jUx9)](https://codecov.io/gh/frappe/press)
 [![unittests](https://github.com/frappe/press/actions/workflows/main.yaml/badge.svg)](https://github.com/frappe/press/actions/workflows/main.yaml)
@@ -28,7 +28,7 @@ Press is a 100% open-source cloud hosting for the Frappe stack.
 
 We originally hosted our customer sites on an internal cloud platform called "Central," designed to automate creating and hosting sites when customers signed up on our website. Central was primarily built to host ERPNext, our flagship product. However, as our customers' needs evolved, they began requesting the ability to host custom applications, a feature that was not a priority in Central.
 
-Additionally, customers lacked full control over their servers—no SSH access, no ability to manage updates, and limited flexibility in interacting with their environment. This led us to launch Frappe Cloud, to build a self-serve cloud platform that would empower our customers with complete control over their hosting experience.
+Additionally, customers lacked full control over their servers—no SSH access, no ability to manage updates, and limited flexibility in interacting with their environment. This led us to launch Easytouch Cloud, to build a self-serve cloud platform that would empower our customers with complete control over their hosting experience.
 
 ### Key Features
 

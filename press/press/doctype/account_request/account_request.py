@@ -237,7 +237,7 @@ class AccountRequest(Document):
 			print()
 			return
 
-		subject = f"{self.otp} - OTP for Frappe Cloud Login"
+		subject = f"{self.otp} - OTP for Easytouch Cloud Login"
 		args = {
 			"otp": self.otp,
 		}

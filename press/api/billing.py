@@ -760,7 +760,7 @@ def generate_stk_push(**kwargs):
 			callback_url=callback_url,
 			reference_code=mpesa_setup.till_number,
 			phone_number=mobile_number,
-			description="Frappe Cloud Payment",
+			description="Easytouch Cloud Payment",
 		)
 		return response  # noqa: RET504
 

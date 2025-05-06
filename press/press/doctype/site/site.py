@@ -1812,16 +1812,16 @@ class Site(Document, TagHelpers):
 
 		webhook_data = [
 			{
-				"name": "Sync User records with Frappe Cloud on create",
+				"name": "Sync User records with Easytouch Cloud on create",
 				"webhook_docevent": "after_insert",
 			},
 			{
-				"name": "Sync User records with Frappe Cloud on update",
+				"name": "Sync User records with Easytouch Cloud on update",
 				"webhook_docevent": "on_update",
 				"condition": """doc.has_value_changed("enabled")""",
 			},
 			{
-				"name": "Sync User records with Frappe Cloud on delete",
+				"name": "Sync User records with Easytouch Cloud on delete",
 				"webhook_docevent": "on_trash",
 			},
 		]

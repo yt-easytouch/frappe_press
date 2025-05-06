@@ -1,6 +1,6 @@
 <template>
 	<div class="h-screen overflow-hidden sm:bg-gray-50">
-		<LoginBox title="Log in to your site on Frappe Cloud" :subtitle="subtitle">
+		<LoginBox title="Log in to your site on Easytouch Cloud" :subtitle="subtitle">
 			<template v-slot:default>
 				<div>
 					<div v-if="sitePrePicked">
@@ -201,7 +201,7 @@
 						"
 						icon-right="arrow-right"
 						variant="ghost"
-						label="Go to Frappe Cloud dashboard"
+						label="Go to Easytouch Cloud dashboard"
 					/>
 				</div>
 			</template>

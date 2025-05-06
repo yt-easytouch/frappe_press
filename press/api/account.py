@@ -1219,7 +1219,7 @@ def get_2fa_qr_code_url():
 		).insert()
 
 	return pyotp.totp.TOTP(user_totp_secret).provisioning_uri(
-		name=frappe.session.user, issuer_name="Frappe Cloud"
+		name=frappe.session.user, issuer_name="Easytouch Cloud"
 	)
 
 

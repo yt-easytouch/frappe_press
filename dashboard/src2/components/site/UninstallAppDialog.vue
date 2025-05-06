@@ -77,7 +77,7 @@ const feedbackOptions = [
 	'Was just testing, not a long-term user',
 	'Missing features I needed',
 	'Setup and onboarding were too complex',
-	'Prefer self-hosting over Frappe Cloud',
+	'Prefer self-hosting over Easytouch Cloud',
 	'Too expensive for my use case',
 	'Other',
 ].map((option) => ({ label: option, value: option }));

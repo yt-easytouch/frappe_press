@@ -197,7 +197,7 @@ class VirtualDiskSnapshot(Document):
 			TagSpecifications=[
 				{
 					"ResourceType": "volume",
-					"Tags": [{"Key": "Name", "Value": f"Frappe Cloud Snapshot - {self.name}"}],
+					"Tags": [{"Key": "Name", "Value": f"Easytouch Cloud Snapshot - {self.name}"}],
 				},
 			],
 			Iops=iops,
@@ -411,7 +411,7 @@ def _should_skip_snapshot(snapshot):
 	if len(tag_name_parts) != 3:
 		return True
 	identifier, virtual_machine, _ = tag_name_parts
-	if identifier != "Frappe Cloud":
+	if identifier != "Easytouch Cloud":
 		return True
 	if not frappe.db.exists("Virtual Machine", virtual_machine):
 		return True

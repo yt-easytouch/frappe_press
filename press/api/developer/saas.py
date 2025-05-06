@@ -112,7 +112,7 @@ def get_trial_expiry(secret_key):
 
 
 """
-NOTE: These mentioned apis are used for all type of saas sites to allow login to frappe cloud
+NOTE: These mentioned apis are used for all type of saas sites to allow login to Easytouch Cloud
 - send_verification_code
 - verify_verification_code
 - login_to_fc
@@ -137,7 +137,7 @@ def send_verification_code(domain: str, route: str = ""):
 	team_name = site_info.get("team")
 	team_info = frappe.get_value("Team", team_name, ["name", "enabled", "user", "enforce_2fa"], as_dict=True)
 	if not team_info or not team_info.get("enabled"):
-		frappe.throw("Your Frappe Cloud team is disabled currently.")
+		frappe.throw("Your Easytouch Cloud team is disabled currently.")
 
 	check_if_user_can_login(team_info, site_info)
 
@@ -232,19 +232,19 @@ def check_if_user_can_login(team_info, site_info):
 
 	# restrict to SaaS Site
 	if not (site_info.get("standby_for") or site_info.get("standby_for_product")):
-		frappe.throw("Only SaaS sites are allowed to login to Frappe Cloud via current method.")
+		frappe.throw("Only SaaS sites are allowed to login to Easytouch Cloud via current method.")
 
 
 def send_email_with_verification_code(email, otp):
 	if frappe.conf.developer_mode:
-		print("\nVerification Code for login to Frappe Cloud:")
+		print("\nVerification Code for login to Easytouch Cloud:")
 		print(f"\nOTP for {email}:")
 		print(otp)
 		print()
 	else:
 		frappe.sendmail(
 			recipients=email,
-			subject="Verification Code for Frappe Cloud Login",
+			subject="Verification Code for Easytouch Cloud Login",
 			template="verification_code_for_login",
 			args={
 				"full_name": frappe.get_value("User", email, "full_name"),
