@@ -1617,7 +1617,7 @@ def check_domain_allows_letsencrypt_certs(domain):
 		)
 
 
-def check_dns_cname(name, domain):
+def check_dns_cname(name, domain , type_dns="CNAME"):
 	result = {"type": "CNAME", "exists": True, "matched": False, "answer": ""}
 	try:
 		resolver = Resolver(configure=False)
@@ -1721,9 +1721,18 @@ def check_dns_cname_a(name, domain):
 	result = {"CNAME": cname}
 	result.update(cname)
 
+
 	a = check_dns_a(name, domain)
 	result.update({"A": a})
 	result.update(a)
+
+	domain_verify = f"_acme-challenge.{domain}"
+	cname_verify = check_dns_cname("_acme-challenge.easytouch.cloud", domain_verify)
+	#cname_verify['type']="CNAME_VERIFY"
+	result.update({"CNAME_VERIFY": cname_verify})
+	result.update(cname_verify)
+
+	# return result
 
 	if cname["matched"] and a["exists"] and not a["matched"]:
 		frappe.throw(
@@ -1735,6 +1744,14 @@ def check_dns_cname_a(name, domain):
 			f"Domain {domain} has correct A record ({a['answer'].strip().split()[-1]}), but also a CNAME record that points to an incorrect domain ({cname['answer'].strip().split()[-1]}). Please remove the same or update the record.",
 			ConflictingDNSRecord,
 		)
+
+	# if ( a["matched"] or cname["matched"] ) and cname_verify["exists"] and  not cname_verify["matched"]:
+	# 	frappe.throw(
+	# 		f"Domain {domain_verify} has correct CNAME record ",
+	# 		ConflictingDNSRecord,
+	# 	)
+	
+	
 
 	return result
 

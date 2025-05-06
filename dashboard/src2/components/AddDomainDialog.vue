@@ -21,7 +21,7 @@
 					v-if="newDomain && !dnsVerified"
 					class="prose prose-sm space-y-2 prose-strong:text-gray-800"
 				>
-					<p>Create one of the following DNS record: *</p>
+					<p>Create one of the following DNS record:</p>
 					<ul>
 						<li>
 							<strong>CNAME</strong> record from
@@ -52,6 +52,10 @@
 						<span class="font-semibold text-gray-700">{{ newDomain }}</span
 						>.
 					</p>
+					<div
+						v-if="newDomain && ( (dnsResult.CNAME && !dnsResult.CNAME.matched) || (dnsResult.A && !dnsResult.A.matched) )"
+						
+					>
 					<div
 						v-if="newDomain && dnsResult.CNAME && !dnsResult.CNAME.matched"
 						class="space-y-2"
@@ -86,6 +90,21 @@
 							</p>
 						</div>
 					</div>
+					</div>
+
+					<div v-if="newDomain && dnsResult.CNAME_VERIFY && !dnsResult.CNAME_VERIFY.matched"
+						class="space-y-2">
+						<p class="text-base">
+							<span class="font-semibold text-gray-700">CNAME (verify domain)</span>
+						</p>
+						<div
+							class="flex flex-row items-center justify-between rounded-lg border-2 p-2">
+							<p class="select-all overflow-hidden font-mono text-sm text-gray-800">
+								{{ dnsResult.CNAME_VERIFY.answer }}
+							</p>
+						</div>
+					</div>
+						
 				</div>
 				<p class="flex text-base" v-if="dnsVerified === false">
 					<FeatherIcon

@@ -95,7 +95,7 @@
 					/>
 
 					<div v-if="newDomain && !dnsVerified" class="space-y-2 text-base">
-						<p>Create one of the following DNS records *</p>
+						<p>Create one of the following DNS records</p>
 						<p class="px-2">
 							<span class="font-semibold text-gray-700">CNAME</span> record from
 							<span class="font-semibold text-gray-700">{{ newDomain }}</span>
