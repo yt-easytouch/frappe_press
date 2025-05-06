@@ -27,7 +27,7 @@
 			<Button
 				class="ml-auto"
 				variant="outline"
-				link="https://frappecloud.com/docs/sites/version-upgrade"
+				link="https://easytouch.cloud/docs/sites/version-upgrade"
 			>
 				Upgrade Now
 			</Button>

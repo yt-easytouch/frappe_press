@@ -652,13 +652,11 @@ export default {
 								title: 'Download Backup',
 								message: `You will be downloading the ${getFileName(
 									file
-								)} backup of the site <b>${
-									site.doc?.host_name || site.doc?.name
-								}</b> that was created on ${date(backup.creation, 'llll')}.${
-									!backup.offsite
+								)} backup of the site <b>${site.doc?.host_name || site.doc?.name
+									}</b> that was created on ${date(backup.creation, 'llll')}.${!backup.offsite
 										? '<br><br><div class="p-2 bg-gray-100 border-gray-200 rounded">You have to be logged in as a <b>System Manager</b> <em>in your site</em> to download the backup.<div>'
 										: ''
-								}`,
+									}`,
 								onSuccess() {
 									downloadBackup(backup, file);
 								}
@@ -1183,9 +1181,8 @@ export default {
 																							row.source_hash.slice(0, 7),
 																						variant: 'ghost',
 																						class: 'font-mono',
-																						link: `${
-																							row.diff_url.split('/compare')[0]
-																						}/commit/${row.source_hash}`
+																						link: `${row.diff_url.split('/compare')[0]
+																							}/commit/${row.source_hash}`
 																					};
 																				}
 																			},
@@ -1200,9 +1197,8 @@ export default {
 																							row.destination_hash.slice(0, 7),
 																						variant: 'ghost',
 																						class: 'font-mono',
-																						link: `${
-																							row.diff_url.split('/compare')[0]
-																						}/commit/${row.destination_hash}`
+																						link: `${row.diff_url.split('/compare')[0]
+																							}/commit/${row.destination_hash}`
 																					};
 																				}
 																			},
@@ -1531,12 +1527,12 @@ export default {
 									fields:
 										$team.name !== site.doc.team
 											? [
-													{
-														label: 'Reason',
-														type: 'textarea',
-														fieldname: 'reason'
-													}
-											  ]
+												{
+													label: 'Reason',
+													type: 'textarea',
+													fieldname: 'reason'
+												}
+											]
 											: [],
 									onSuccess: ({ hide, values }) => {
 										if (!values.reason && $team.name !== site.doc.team) {

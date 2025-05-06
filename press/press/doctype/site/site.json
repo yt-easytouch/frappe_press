@@ -111,8 +111,7 @@
             "in_standard_filter": 1,
             "label": "Bench",
             "options": "Bench",
-            "reqd": 1,
-            "set_only_once": 1
+            "reqd": 1
         },
         {
             "default": "Pending",
@@ -124,7 +123,6 @@
             "in_standard_filter": 1,
             "label": "Status",
             "options": "Pending\nInstalling\nUpdating\nActive\nInactive\nBroken\nArchived\nSuspended",
-            "read_only": 1,
             "reqd": 1
         },
         {
@@ -292,7 +290,6 @@
             "fieldtype": "Link",
             "label": "Cluster",
             "options": "Cluster",
-            "read_only": 1,
             "reqd": 1
         },
         {
@@ -301,7 +298,6 @@
             "fieldtype": "Link",
             "label": "Release Group",
             "options": "Release Group",
-            "read_only": 1,
             "reqd": 1,
             "search_index": 1
         },

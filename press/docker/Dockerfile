@@ -101,9 +101,9 @@ RUN wget https://github.com/wkhtmltopdf/wkhtmltopdf/releases/download/0.12.4/wkh
 {% endif %}
 
 {% if doc.is_code_server_enabled %}
+#Install Code Server
 RUN curl -fsSL https://code-server.dev/install.sh | sh `#stage-pre-code-server`
 {% endif %}
-
 # Install Fonts
 RUN git clone --progress --depth 1 https://github.com/frappe/fonts.git /tmp/fonts \
   && rm -rf /etc/fonts && mv /tmp/fonts/etc_fonts /etc/fonts \

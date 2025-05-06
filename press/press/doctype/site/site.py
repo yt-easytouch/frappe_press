@@ -251,6 +251,7 @@ class Site(Document, TagHelpers):
 		doc.latest_frappe_version = frappe.db.get_value(
 			"Frappe Version", {"status": "Stable", "public": True}, order_by="name desc"
 		)
+		doc.latest_easytouch_version = doc.latest_frappe_version
 		doc.eol_versions = frappe.db.get_all(
 			"Frappe Version",
 			filters={"status": "End of Life"},
@@ -2216,11 +2217,13 @@ class Site(Document, TagHelpers):
 		if self.server:
 			bench_query = bench_query.where(Server.name == self.server)
 
+		
 		result = bench_query.run(as_dict=True)
 		if len(result) == 0:
 			frappe.throw("No bench available to deploy this site")
 			return
-
+		
+		# frappe.log_error(f"resultresult : {result}")
 		self.bench = result[0].name
 		self.server = result[0].server
 		if release_group_names:

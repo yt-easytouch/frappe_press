@@ -37,7 +37,7 @@
 </template>
 
 <script>
-import FCLogo from '@/components/icons/FCLogo.vue';
+import FCLogo from '@/components/icons/ETLogo.vue';
 import { notify } from '@/utils/toast';
 
 export default {

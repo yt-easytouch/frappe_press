@@ -634,12 +634,12 @@ def poll_pending_jobs():
   
 @frappe.whitelist()
 def poll_pending_jobsapi():
-	conn = http.client.HTTPSConnection("webhook.site")
-	payload = ''
-	headers = {}
-	conn.request("GET", "/40041d03-c78a-4f78-9241-7c59b6c8556c?api=api", payload, headers)
-	res = conn.getresponse()
-	data = res.read()
+	# conn = http.client.HTTPSConnection("webhook.site")
+	# payload = ''
+	# headers = {}
+	# conn.request("GET", "/40041d03-c78a-4f78-9241-7c59b6c8556c?api=api", payload, headers)
+	# res = conn.getresponse()
+	# data = res.read()
 	servers = frappe.get_all(
 		"Agent Job",
 		fields=["server", "server_type"],

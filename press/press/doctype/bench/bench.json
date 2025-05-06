@@ -93,7 +93,6 @@
    "in_standard_filter": 1,
    "label": "Status",
    "options": "Pending\nInstalling\nUpdating\nActive\nBroken\nArchived",
-   "read_only": 1,
    "reqd": 1
   },
   {
