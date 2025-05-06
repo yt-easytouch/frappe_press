@@ -32,7 +32,7 @@ export default {
 			const onboardingComplete = this.$team.doc.onboarding.complete;
 			const isSaasUser = this.$team.doc.is_saas_user;
 			const enforce2FA = Boolean(
-				!this.$team.doc.is_desk_user &&
+					!this.$team.doc.is_desk_user &&
 					this.$team.doc.enforce_2fa &&
 					!this.$team.doc.user_info?.is_2fa_enabled,
 			);

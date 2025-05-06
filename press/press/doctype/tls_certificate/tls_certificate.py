@@ -502,7 +502,7 @@ class ScmeSH(BaseCA):
         plugin = f"--dns dns_20i --bearer {bearer_token} "
         staging = "--staging" if frappe.conf.developer_mode else ""
         challenge_alias = f"--challenge-alias {self.settings.challenge_alias}" if self.settings.challenge_alias else ""
-        force_renewal = "--force  --dnssleep 60 "
+        force_renewal = "--force  " #--dnssleep 60
         
         acme_sh_path = "/usr/local/acme.sh/acme.sh"
         command = (
