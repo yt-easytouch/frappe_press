@@ -937,6 +937,22 @@ class ReleaseGroup(Document, TagHelpers):
 
 	@cached_property
 	def last_dc_info(self) -> "LastDeployInfo | None":
+		dc = frappe.qb.DocType("Deploy Candidate")
+
+		query = (
+			frappe.qb.from_(dc)
+			.where(dc.group == self.name)
+			.select(dc.name, dc.status, dc.creation)
+			.orderby(dc.creation, order=frappe.qb.desc)
+			.limit(1)
+		)
+
+		results = query.run(as_dict=True)
+
+		if len(results) > 0:
+			return results[0]
+		return None
+
 		DeployCandidateBuild = frappe.qb.DocType("Deploy Candidate Build")
 
 		query = (
