@@ -158,7 +158,7 @@ def create_app_patch(
 	team: str,
 	patch_config: PatchConfig,
 ) -> list[str]:
-	patch = get_patch(patch_config)
+	patch,file_name = get_patch(app,team , patch_config)
 	benches = get_benches(release_group, patch_config)
 	patches = []
 
@@ -172,7 +172,7 @@ def create_app_patch(
 			team=team,
 			app_release=get_app_release(bench, app),
 			url=patch_config.get("patch_url"),
-			filename=patch_config.get("filename"),
+			filename=file_name,
 			build_assets=patch_config.get("build_assets"),
 		)
 
@@ -182,13 +182,72 @@ def create_app_patch(
 
 	return patches
 
+def get_patch(app, team, patch_config: PatchConfig) -> str:
+    file_name = patch_config.get("filename")
+    if patch_config.get("release"):
+        
+        # Get App Release details
+        app_releases = frappe.db.get_all(
+            "App Release",
+            filters={"name": patch_config.get("release"), "team": team},
+            fields=["hash", "source"],
+            order_by="creation desc",
+            limit=1
+        )
+        if not app_releases:
+            frappe.throw("❌ App Release not found.")
+        app_release = app_releases[0]
+        
+        file_name = f"{app_release['hash']}.patch"
 
-def get_patch(patch_config: PatchConfig) -> str:
-	if patch := patch_config.get("patch"):
-		return patch
+        # Get GitHub access token from Team
+        github_access_token = frappe.db.get_value(
+            "Team",
+            {"name": team},
+            "github_access_token"
+        )
+        if not github_access_token:
+            frappe.throw("❌ GitHub token not found for the team.")
 
-	patch_url = patch_config.get("patch_url")
-	return requests.get(patch_url).text
+        # Get repository info from App Source
+        app_sources = frappe.db.get_all(
+            "App Source",
+            filters={"name": app_release["source"], "app": app},
+            fields=["repository", "repository_owner"],
+            limit=1
+        )
+        if not app_sources:
+            frappe.throw("❌ App source not found.")
+        app_source = app_sources[0]
+
+        # Construct GitHub patch URL
+        url = f"https://api.github.com/repos/{app_source['repository_owner']}/{app_source['repository']}/commits/{app_release['hash']}"
+        headers = {
+            "Authorization": f"token {github_access_token}",
+            "Accept": "application/vnd.github.v3.patch",
+        }
+
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            return response.text , file_name
+        else:
+            frappe.throw(f"❌ Git Failed with status {response.status_code}: {response.text}")
+
+    else:
+        # Use manual patch or patch_url
+        if patch := patch_config.get("patch"):
+            return patch , file_name
+
+        patch_url = patch_config.get("patch_url")
+        if not patch_url:
+            frappe.throw("❌ No patch or patch URL provided.")
+
+        response = requests.get(patch_url)
+        if response.status_code == 200:
+            return response.text , file_name
+        else:
+            frappe.throw(f"❌ Failed to fetch patch from URL: {response.status_code}")
+
 
 
 def get_benches(release_group: str, patch_config: PatchConfig) -> list[str]:

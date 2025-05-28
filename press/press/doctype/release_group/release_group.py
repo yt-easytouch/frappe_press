@@ -1029,7 +1029,9 @@ class ReleaseGroup(Document, TagHelpers):
 						"current_hash": current_hash,
 						"current_tag": current_tag,
 						"current_release": bench_app.release if bench_app else None,
+      					"previous_release": app.previous_release,
 						"releases": app.releases,
+						
 						"next_release": app.release,
 						"will_branch_change": will_branch_change,
 						"current_branch": current_branch,
@@ -1047,7 +1049,7 @@ class ReleaseGroup(Document, TagHelpers):
 		if current_team.parent_team:
 			app_publishers_team.append(current_team.parent_team)
 
-		only_approved_for_sources = [self.apps[0].source]  # add frappe app source
+		only_approved_for_sources = [self.apps[0].source]
 		if marketplace_app_sources:
 			AppSource = frappe.qb.DocType("App Source")
 			only_approved_for_sources.append(
@@ -1088,15 +1090,12 @@ class ReleaseGroup(Document, TagHelpers):
 			else:
 				latest_app_release = find(latest_app_releases, lambda x: x.source == app.source)
 
-			# No release exists for this source
 			if not latest_app_release:
 				continue
 
 			bench_app = find(current_apps, lambda x: x.app == app.app)
 
-			upcoming_release = latest_app_release.name if latest_app_release else bench_app.release
-			upcoming_hash = latest_app_release.hash if latest_app_release else bench_app.hash
-
+			# Filter releases based on branch matching
 			upcoming_releases = latest_app_releases
 			if bench_app:
 				new_branch = frappe.db.get_value("App Source", app.source, "branch")
@@ -1112,20 +1111,48 @@ class ReleaseGroup(Document, TagHelpers):
 						if release.creation > current_release_creation
 					]
 
+			# Slice to 16 upcoming releases
+			upcoming_releases = upcoming_releases[:16]
+
+			# Get creation of first upcoming release
+			first_upcoming_creation = upcoming_releases[-1]["creation"] if upcoming_releases else None
+
+			# ✅ Get previous_release by filtering before first upcoming release (same app + same source)
+			previous_release = None
+			if first_upcoming_creation:
+				previous_release = frappe.db.get_value(
+					"App Release",
+					filters={
+						"app": app.app,
+						"source": app.source,
+						"creation": ("<", first_upcoming_creation),
+					},
+					fieldname=["name", "message", "creation", "hash" ,"source"],
+					order_by="creation desc",
+					as_dict=True,
+				)
+
+			# Determine upcoming release and hash
+			upcoming_release = latest_app_release.name if latest_app_release else (bench_app.release if bench_app else None)
+			upcoming_hash = latest_app_release.hash if latest_app_release else (bench_app.hash if bench_app else None)
+
 			next_apps.append(
 				frappe._dict(
 					{
 						"app": app.app,
 						"source": app.source,
 						"release": upcoming_release,
+						"upcoming_hash": upcoming_hash,
 						"hash": upcoming_hash,
 						"title": app.title,
-						"releases": upcoming_releases[:16],
+						"releases": upcoming_releases,
+						"previous_release": previous_release,
 					}
 				)
 			)
 
 		return next_apps
+
 
 	def get_removed_apps(self):
 		# Apps that were removed from the release group

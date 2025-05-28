@@ -329,10 +329,17 @@ export default {
 							{
 								label: 'Apply Patch',
 								onClick: () => {
+									const matched = releaseGroup.doc.deploy_information.apps.find(
+										(a) => a.app === row.name
+									);
+									const releases = matched?.releases || []
+
 									renderDialog(
 										h(PatchAppDialog, {
 											group: releaseGroup.name,
 											app: row.name,
+											source: row.source,
+											releases: releases,
 										}),
 									);
 								},

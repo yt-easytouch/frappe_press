@@ -611,7 +611,7 @@ class DeployCandidate(Document):
 			frappe.get_doc("Site Group Deploy", site_group_deploy).update_site_group_deploy_on_deploy_failure(
 				self,
 			)
-
+	
 
 def can_pull_update(file_paths: list[str]) -> bool:
 	"""

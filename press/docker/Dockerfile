@@ -209,6 +209,9 @@ RUN `#stage-bench-env`
 ENV {{v.key}} {{ v.value }}
 {% endfor %}
 
+# First: install compatible click version
+RUN pip install "click<8.1"
+
 # Install Frappe app
 RUN --mount=type=cache,sharing=locked,target=/home/frappe/.cache,uid=1000,gid=1000 --mount=type=bind,source=apps/frappe,target=/home/frappe/context/apps/frappe bench init --python /usr/bin/python${PYTHON_VERSION} --no-backups --frappe-path file:///home/frappe/context/apps/frappe frappe-bench `#stage-apps-frappe`
 WORKDIR /home/frappe/frappe-bench

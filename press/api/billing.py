@@ -2,6 +2,7 @@
 # For license information, please see license.txt
 from __future__ import annotations
 
+from http import client
 from itertools import groupby
 
 import frappe
@@ -703,6 +704,72 @@ def handle_razorpay_payment_failed(response):
 	payment_record.failure_reason = response["error"]["description"]
 	payment_record.save(ignore_permissions=True)
 
+@frappe.whitelist()
+def create_bitipay_order(amount, type=None):
+	# client = get_bitipay_client()
+
+	team = get_current_team(get_doc=True)
+
+	
+
+	amount = round(amount, 2)
+	data = {
+		"amount": amount,
+		"currency": team.currency,
+		"notes": {
+			"Description": "Order for Easytouch Cloud Prepaid Credits",
+			"Team (Easytouch Cloud ID)": team.name,
+			"gst": 0,
+		},
+	}
+	if type and type == "Partnership Fee":
+		data.get("notes").update({"Type": type})
+	# order = client.order.create(data=data)
+	order_id = frappe.generate_hash(length=12)
+	key_id = "21111"
+
+	payment_record = frappe.get_doc(
+		{"doctype": "Bitipay Payment Record", "order_id": order_id, "team": team.name, "type": type}
+	).insert(ignore_permissions=True)
+
+	return {
+		"order_id": order_id,
+		"key_id": key_id,
+		"payment_record": payment_record.name,
+	}
+
+
+@frappe.whitelist()
+def handle_bitipay_payment_success(response):
+	# client = get_bitipay_client()
+	# client.utility.verify_payment_signature(response)
+
+	payment_record = frappe.get_doc(
+		"Bitipay Payment Record",
+		{"order_id": response.get("bitipay_order_id")},
+		for_update=True,
+	)
+	payment_record.update(
+		{
+			"payment_id": response.get("bitipay_payment_id"),
+			"signature": response.get("bitipay_signature"),
+			"status": "Captured",
+		}
+	)
+	payment_record.save(ignore_permissions=True)
+
+
+@frappe.whitelist()
+def handle_bitipay_payment_failed(response):
+	payment_record = frappe.get_doc(
+		"Bitipay Payment Record",
+		{"order_id": response["error"]["metadata"].get("order_id")},
+		for_update=True,
+	)
+
+	payment_record.status = "Failed"
+	payment_record.failure_reason = response["error"]["description"]
+	payment_record.save(ignore_permissions=True)
 
 @frappe.whitelist()
 def total_unpaid_amount():

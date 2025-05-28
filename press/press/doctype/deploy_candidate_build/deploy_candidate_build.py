@@ -212,6 +212,7 @@ class DeployCandidateBuild(Document):
 		status: DF.Literal["Draft", "Scheduled", "Pending", "Preparing", "Running", "Success", "Failure"]
 		team: DF.Link
 		user_addressable_failure: DF.Check
+  
 	# end: auto-generated types
 
 	dashboard_fields = (
@@ -818,7 +819,9 @@ class DeployCandidateBuild(Document):
 		# Set props used when generating the Dockerfile
 		self.candidate._set_additional_packages()
 		self.candidate._set_container_mounts()
-
+  
+		self.is_code_server_enabled = frappe.get_value("Release Group", self.group, "is_code_server_enabled")
+  
 		# Dockerfile generation
 		dockerfile = self._generate_dockerfile()
 		self.add_build_steps(dockerfile)
