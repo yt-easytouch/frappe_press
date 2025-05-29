@@ -61,8 +61,8 @@ class CodeServer(Document):
 			create_dns_record(doc=self, record_name=self.name)
 			agent = Agent(self.proxy_server, server_type="Proxy Server")
 			agent.new_upstream_file(server=self.server, code_server=self.name)
-
-			self.password = frappe.generate_hash(length=40)
+			if not self.password:
+				self.password = frappe.generate_hash(length=40)
 			agent = Agent(self.server, server_type="Server")
 			agent.setup_code_server(self.bench, self.name, self.password)
 			self.save(ignore_permissions=True)
@@ -83,7 +83,8 @@ class CodeServer(Document):
 		try:
 			self.status = "Pending"
 			agent = Agent(self.server, server_type="Server")
-			self.password = frappe.generate_hash(length=40)
+			if not self.password:
+				self.password = frappe.generate_hash(length=40)
 			agent.start_code_server(self.bench, self.name, self.password)
 			self.save(ignore_permissions=True)
 		except Exception as e:
