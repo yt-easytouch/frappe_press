@@ -394,6 +394,7 @@ def get(name, timezone, duration="7d"):
 	timespan, timegrain = TIMESPAN_TIMEGRAIN_MAP[duration]
 
 	request_data = get_usage(name, "request", timezone, timespan, timegrain)
+	# return request_data
 	uptime_data = get_uptime(name, timezone, timespan, timegrain)
 
 	plan = frappe.get_cached_doc("Site", name).plan
@@ -650,7 +651,7 @@ def get_usage(site, type, timezone, timespan, timegrain):
 			}
 		},
 	}
-
+	# return  {"url":url, "json":query, "auth": ("frappe", password)}
 	response = requests.post(url, json=query, auth=("frappe", password)).json()
 
 	buckets = []
@@ -806,7 +807,6 @@ def request_logs(name, timezone, date, sort=None, start=0):
 		"from": start,
 		"size": 10,
 	}
-
 	response = requests.post(url, json=query, auth=("frappe", password)).json()
 	out = []
 	for d in response["hits"]["hits"]:

@@ -492,7 +492,7 @@ class Site(Document, TagHelpers):
 			if "System Manager" not in frappe.get_roles():
 				is_plan_free = (plan.price_inr == 0 or plan.price_usd == 0) and not plan.dedicated_server_plan
 				if is_plan_free:
-					frappe.throw("You can't select a free plan!")
+					frappe.throw(f"You can't select a free plan! {self.subscription_plan}")
 
 			# If site is on public server, don't allow unlimited plans
 			if is_site_on_public_server and plan.dedicated_server_plan:

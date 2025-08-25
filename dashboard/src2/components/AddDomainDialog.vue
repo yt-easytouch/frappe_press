@@ -36,6 +36,7 @@
 							<strong>{{ site.inbound_ip }}</strong>
 						</li>
 					</ul>
+					<div v-if="showCnameVerify">
 					<p>Create the following CNAME DNS record to verify your domain:</p>
 					<ul>
 						<li>
@@ -45,6 +46,7 @@
 							<strong>_acme-challenge.easytouch.cloud</strong>
 						</li>
 					</ul>
+				</div>
 				</div>
 				<div v-if="dnsResult && !dnsResult.matched" class="space-y-2">
 					<p class="text-base">
@@ -167,7 +169,11 @@ export default {
 		site: {
 			type: Object,
 			required: true
-		}
+		},
+		showCnameVerify: {
+		type: Boolean,
+		default: false
+	}
 	},
 	emits: ['domainAdded'],
 	data() {
