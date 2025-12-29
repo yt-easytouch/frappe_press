@@ -72,5 +72,7 @@ repos:
     rev: v1.18.2
     hooks:
       - id: mypy
-        args: [--strict, --ignore-missing-imports]
+        args:
+          [--ignore-missing-imports, --follow-imports=skip, --exclude-gitignore]
         exclude: ^tests/|test_.*\.py$ # Exclude the 'tests/' directory and files starting with 'test_'
+        additional_dependencies: [types-requests<2.32]

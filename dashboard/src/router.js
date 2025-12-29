@@ -155,6 +155,11 @@ let router = createRouter({
 					component: () => import('./pages/BillingOverview.vue'),
 				},
 				{
+					name: 'BillingForecast',
+					path: 'forecast',
+					component: () => import('./pages/BillingForecast.vue'),
+				},
+				{
 					name: 'BillingInvoices',
 					path: 'invoices',
 					component: () => import('./pages/BillingInvoices.vue'),
@@ -253,6 +258,11 @@ let router = createRouter({
 					path: 'certificates',
 					component: () =>
 						import('./components/partners/PartnerCertificates.vue'),
+				},
+				{
+					name: 'PartnerResources',
+					path: 'resources',
+					component: () => import('./components/partners/PartnerResources.vue'),
 				},
 				{
 					name: 'PartnerApprovalRequests',
