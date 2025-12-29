@@ -115,6 +115,11 @@ export default {
 				filterControls() {
 					return [
 						{
+							type: 'data',
+							fieldname: 'lead_name',
+							label: 'Lead Name',
+						},
+						{
 							type: 'select',
 							fieldname: 'status',
 							label: 'Status',
@@ -141,6 +146,16 @@ export default {
 								'Ready for Closing',
 								'Negotiation',
 								'Learning',
+							],
+						},
+						{
+							type: 'select',
+							fieldname: 'source',
+							label: 'Lead Source',
+							options: [
+								{ label: 'Partner Owned', value: 'Partner Owned' },
+								{ label: 'Passed to Partner', value: 'Passed to Partner' },
+								{ label: 'Partner Listing', value: 'Partner Listing' },
 							],
 						},
 					];

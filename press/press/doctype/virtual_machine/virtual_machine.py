@@ -47,6 +47,11 @@ if typing.TYPE_CHECKING:
 	from press.infrastructure.doctype.virtual_machine_migration.virtual_machine_migration import (
 		VirtualMachineMigration,
 	)
+	from press.press.doctype.cluster.cluster import Cluster
+	from press.press.doctype.database_server.database_server import DatabaseServer
+	from press.press.doctype.log_server.log_server import LogServer
+	from press.press.doctype.monitor_server.monitor_server import MonitorServer
+	from press.press.doctype.proxy_server.proxy_server import ProxyServer
 	from press.press.doctype.server.server import Server
 	from press.press.doctype.virtual_disk_snapshot.virtual_disk_snapshot import VirtualDiskSnapshot
 
@@ -624,6 +629,7 @@ class VirtualMachine(Document):
 				"private_ip": self.private_ip_address,
 				"ansible_memtotal_mb": memory,
 				"mariadb_root_password": server.get_password("mariadb_root_password"),
+				"db_port": server.db_port or 3306,
 			}
 
 			context.update(
@@ -1398,7 +1404,7 @@ class VirtualMachine(Document):
 		return None
 
 	@frappe.whitelist()
-	def create_server(self, is_secondary: bool = False, primary: str | None = None):
+	def create_server(self, is_secondary: bool = False, primary: str | None = None) -> Server:
 		document = {
 			"doctype": "Server",
 			"hostname": f"{self.series}{self.index}-{slug(self.cluster)}",
@@ -1419,10 +1425,12 @@ class VirtualMachine(Document):
 			document["is_server_renamed"] = True
 			document["is_upstream_setup"] = True
 
-		return frappe.get_doc(document).insert()
+		server = frappe.get_doc(document).insert()
+		frappe.msgprint(frappe.get_desk_link(server.doctype, server.name))
+		return server
 
 	@frappe.whitelist()
-	def create_database_server(self):
+	def create_database_server(self) -> DatabaseServer:
 		document = {
 			"doctype": "Database Server",
 			"hostname": f"{self.series}{self.index}-{slug(self.cluster)}",
@@ -1453,13 +1461,15 @@ class VirtualMachine(Document):
 					f"Virtual Machine Image {self.virtual_machine_image} does not have a MariaDB root password set."
 				)
 
-		return frappe.get_doc(document).insert()
+		server = frappe.get_doc(document).insert()
+		frappe.msgprint(frappe.get_desk_link(server.doctype, server.name))
+		return server
 
 	def get_root_domains(self):
 		return frappe.get_all("Root Domain", {"enabled": True}, pluck="name")
 
 	@frappe.whitelist()
-	def create_proxy_server(self):
+	def create_proxy_server(self) -> ProxyServer:
 		document = {
 			"doctype": "Proxy Server",
 			"hostname": f"{self.series}{self.index}-{slug(self.cluster)}",
@@ -1474,10 +1484,12 @@ class VirtualMachine(Document):
 			document["is_server_setup"] = True
 			document["is_primary"] = True
 
-		return frappe.get_doc(document).insert()
+		server = frappe.get_doc(document).insert()
+		frappe.msgprint(frappe.get_desk_link(server.doctype, server.name))
+		return server
 
 	@frappe.whitelist()
-	def create_monitor_server(self):
+	def create_monitor_server(self) -> MonitorServer:
 		document = {
 			"doctype": "Monitor Server",
 			"hostname": f"{self.series}{self.index}-{slug(self.cluster)}",
@@ -1490,10 +1502,12 @@ class VirtualMachine(Document):
 		if self.virtual_machine_image:
 			document["is_server_setup"] = True
 
-		return frappe.get_doc(document).insert()
+		server = frappe.get_doc(document).insert()
+		frappe.msgprint(frappe.get_desk_link(server.doctype, server.name))
+		return server
 
 	@frappe.whitelist()
-	def create_log_server(self):
+	def create_log_server(self) -> LogServer:
 		document = {
 			"doctype": "Log Server",
 			"hostname": f"{self.series}{self.index}-{slug(self.cluster)}",
@@ -1506,7 +1520,9 @@ class VirtualMachine(Document):
 		if self.virtual_machine_image:
 			document["is_server_setup"] = True
 
-		return frappe.get_doc(document).insert()
+		server = frappe.get_doc(document).insert()
+		frappe.msgprint(frappe.get_desk_link(server.doctype, server.name))
+		return server
 
 	@frappe.whitelist()
 	def create_registry_server(self):
@@ -1522,7 +1538,9 @@ class VirtualMachine(Document):
 		if self.virtual_machine_image:
 			document["is_server_setup"] = True
 
-		return frappe.get_doc(document).insert()
+		server = frappe.get_doc(document).insert()
+		frappe.msgprint(frappe.get_desk_link(server.doctype, server.name))
+		return server
 
 	def get_security_groups(self):
 		groups = [self.security_group_id]
@@ -1656,11 +1674,11 @@ class VirtualMachine(Document):
 				queue="sync",
 				job_id=f"bulk_sync_oci:{cluster}",
 				deduplicate=True,
-				cluster=cluster,
+				cluster_name=cluster,
 			)
 
-	def bulk_sync_oci_cluster(self, cluster: str):
-		cluster = frappe.get_doc("Cluster", cluster)
+	def bulk_sync_oci_cluster(self, cluster_name: str):
+		cluster: Cluster = frappe.get_doc("Cluster", cluster_name)
 		client: "ComputeClient" = self.client()
 
 		try:
@@ -1699,9 +1717,9 @@ class VirtualMachine(Document):
 			log_error("Virtual Machine OCI Bulk Sync Error", cluster=cluster.name)
 			frappe.db.rollback()
 
-	def bulk_sync_oci_cluster_in_batch(self, instances: list[dict]):
+	def bulk_sync_oci_cluster_in_batch(self, instances: list[frappe._dict]):
 		for instance in instances:
-			machine: VirtualMachine = frappe.get_doc("Virtual Machine", {"instance_id": instance.id})
+			machine: VirtualMachine = frappe.get_doc("Virtual Machine", {"instance_id": instance["id"]})
 			if has_job_timeout_exceeded():
 				return
 			try:
@@ -1946,6 +1964,37 @@ class VirtualMachine(Document):
 
 		if sync:
 			self.sync()
+
+	def detach_static_ip(self):
+		if self.cloud_provider != "AWS EC2" or not self.is_static_ip:
+			return
+
+		client = self.client()
+		response = client.describe_addresses(PublicIps=[self.public_ip_address])
+
+		address_info = response["Addresses"][0]
+		if "AssociationId" not in address_info:
+			return
+
+		client.disassociate_address(AssociationId=address_info["AssociationId"])
+		self.sync()
+
+	def attach_static_ip(self, static_ip):
+		if self.cloud_provider != "AWS EC2":
+			return
+
+		if self.is_static_ip:
+			frappe.throw("Virtual Machine already has a static IP associated.")
+
+		client = self.client()
+		response = client.describe_addresses(PublicIps=[static_ip])
+
+		address_info = response["Addresses"][0]
+		if "AssociationId" in address_info:
+			frappe.throw("Static IP is already associated with another instance.")
+
+		client.associate_address(AllocationId=address_info["AllocationId"], InstanceId=self.instance_id)
+		self.sync()
 
 
 get_permission_query_conditions = get_permission_query_conditions_for_doctype("Virtual Machine")

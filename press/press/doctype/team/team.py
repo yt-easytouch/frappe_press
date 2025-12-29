@@ -11,6 +11,7 @@ from frappe import _
 from frappe.contacts.address_and_contact import load_address_and_contact
 from frappe.core.utils import find
 from frappe.model.document import Document
+from frappe.query_builder.functions import Count
 from frappe.rate_limiter import rate_limit
 from frappe.utils import get_fullname, get_last_day, get_url_to_form, getdate, random_string
 
@@ -144,6 +145,7 @@ class Team(Document):
 		"partner_status",
 		"receive_budget_alerts",
 		"monthly_alert_threshold",
+		"company_name",
 	)
 
 	def get_doc(self, doc):
@@ -189,6 +191,9 @@ class Team(Document):
 		doc.communication_infos = self.get_communication_infos()
 		doc.receive_budget_alerts = self.receive_budget_alerts
 		doc.monthly_alert_threshold = self.monthly_alert_threshold
+		doc.is_binlog_indexer_enabled = not frappe.db.get_single_value(
+			"Press Settings", "disable_binlog_indexer_service", cache=True
+		)
 
 	def onload(self):
 		load_address_and_contact(self)
@@ -357,6 +362,7 @@ class Team(Document):
 		password=None,
 		role=None,
 		press_roles=None,
+		skip_validations=False,
 	):
 		user = frappe.db.get_value("User", email, ["name"], as_dict=True)
 		if not user:
@@ -366,7 +372,10 @@ class Team(Document):
 		self.save(ignore_permissions=True)
 
 		for role in press_roles or []:
-			frappe.get_doc("Press Role", role.press_role).add_user(user.name)
+			frappe.get_doc("Press Role", role.press_role).add_user(
+				user.name,
+				skip_validations=skip_validations,
+			)
 
 	@dashboard_whitelist()
 	def remove_team_member(self, member):
@@ -379,8 +388,8 @@ class Team(Document):
 			roles = (
 				frappe.qb.from_(PressRole)
 				.join(PressRoleUser)
-				.on(PressRole.name == PressRoleUser.parent)
-				.where(PressRoleUser.user == member)
+				.on((PressRoleUser.parent == PressRole.name) & (PressRoleUser.user == member))
+				.where(PressRole.team == self.name)
 				.select(PressRole.name)
 				.run(as_dict=True, pluck="name")
 			)
@@ -521,13 +530,14 @@ class Team(Document):
 		self.servers_enabled = 1
 		self.partner_status = "Active"
 		self.save(ignore_permissions=True)
+		frappe.get_doc("User", self.user).add_roles("Partner")
 		self.create_partner_referral_code()
-		self.create_new_invoice()
 
 	@frappe.whitelist()
 	def disable_erpnext_partner_privileges(self):
 		self.partner_status = "Inactive"
 		self.save(ignore_permissions=True)
+		frappe.get_doc("User", self.user).remove_roles("Partner")
 
 	def create_partner_referral_code(self):
 		if not self.partner_referral_code:
@@ -546,58 +556,6 @@ class Team(Document):
 		if not data:
 			frappe.throw("Partner not found on frappe.io")
 		return frappe.utils.getdate(data.get("start_date"))
-
-	def create_new_invoice(self):
-		"""
-		After enabling partner privileges, new invoice should be created
-		to track the partner achievements
-		"""
-		# check if any active user with an invoice
-		if not frappe.get_all("Invoice", {"team": self.name, "docstatus": ("<", 2)}, pluck="name"):
-			return
-		today = frappe.utils.getdate()
-		current_invoice = frappe.db.get_value(
-			"Invoice",
-			{
-				"team": self.name,
-				"type": "Subscription",
-				"docstatus": 0,
-				"period_end": frappe.utils.get_last_day(today),
-			},
-			"name",
-		)
-
-		if not current_invoice:
-			return
-
-		current_inv_doc = frappe.get_doc("Invoice", current_invoice)
-
-		if current_inv_doc.partner_email and current_inv_doc.partner_email == self.partner_email:
-			# don't create new invoice if partner email is set
-			return
-
-		if (
-			not current_invoice
-			or today == frappe.utils.get_last_day(today)
-			or today == current_inv_doc.period_start
-		):
-			# don't create invoice if new team or today is the last day of the month
-			return
-		current_inv_doc.period_end = frappe.utils.add_days(today, -1)
-		current_inv_doc.flags.on_partner_conversion = True
-		current_inv_doc.save()
-		current_inv_doc.finalize_invoice()
-
-		# create invoice
-		invoice = frappe.get_doc(
-			{
-				"doctype": "Invoice",
-				"team": self.name,
-				"type": "Subscription",
-				"period_start": today,
-			}
-		)
-		invoice.insert()
 
 	def create_referral_bonus(self, referrer_id):
 		# Get team name with this this referrer id
@@ -871,6 +829,32 @@ class Team(Document):
 		customer_object = stripe.Customer.retrieve(self.stripe_customer_id)
 		return (customer_object["balance"] * -1) / 100
 
+	def is_team_owner(self) -> bool:
+		"""
+		Checks if the current user is the owner of the team.
+		"""
+		return bool(frappe.db.get_value("Team", self.name, "user") == frappe.session.user)
+
+	def is_admin_user(self) -> bool:
+		"""
+		Checks if the current user has admin access in the team via roles.
+		"""
+		PressRole = frappe.qb.DocType("Press Role")
+		PressRoleUser = frappe.qb.DocType("Press Role User")
+		return (
+			frappe.qb.from_(PressRoleUser)
+			.left_join(PressRole)
+			.on(PressRole.name == PressRoleUser.parent)
+			.select(Count(PressRoleUser.name).as_("count"))
+			.where(PressRole.team == self.name)
+			.where(PressRoleUser.user == frappe.session.user)
+			.where(PressRole.admin_access == 1)
+			.run(as_dict=1)
+			.pop()
+			.get("count", 0)
+			> 0
+		)
+
 	@dashboard_whitelist()
 	def get_team_members(self):
 		return get_team_members(self.name)
@@ -1050,9 +1034,9 @@ class Team(Document):
 		if response.ok:
 			res = response.json()
 			partner_level = res.get("message")
-			# certificate_count = res.get("certificates")
+			certificate_count = res.get("certificates")
 			if partner_level:
-				return partner_level
+				return [partner_level, certificate_count]
 			return None
 
 		self.add_comment(text="Failed to fetch partner level" + "<br><br>" + response.text)

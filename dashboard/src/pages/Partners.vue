@@ -48,6 +48,11 @@ export default {
 					condition: () => Boolean(this.$team.doc.erpnext_partner),
 				},
 				{
+					label: 'Website Details',
+					route: { name: 'PartnerWebsiteDetails' },
+					condition: () => Boolean(this.$team.doc.erpnext_partner),
+				},
+				{
 					label: 'Dashboard',
 					route: { name: 'PartnerDashboard' },
 					condition: () =>
@@ -68,15 +73,6 @@ export default {
 						),
 				},
 				{
-					label: 'Customer Approval Requests',
-					route: { name: 'PartnerApprovalRequests' },
-					condition: () =>
-						Boolean(
-							this.$team.doc.erpnext_partner &&
-								this.$team.doc.partner_status === 'Active',
-						),
-				},
-				{
 					label: 'Leads',
 					route: { name: 'PartnerLeads' },
 					condition: () =>
@@ -87,7 +83,7 @@ export default {
 						),
 				},
 				{
-					label: 'Certificates',
+					label: 'Certifications',
 					route: { name: 'PartnerCertificates' },
 					condition: () =>
 						Boolean(

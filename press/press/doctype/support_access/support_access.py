@@ -83,6 +83,7 @@ class SupportAccess(Document):
 		self.requested_by = self.requested_by or frappe.session.user
 		self.requested_team = self.requested_team or get_current_team()
 		self.set_expiry()
+		self.resolve_sites()
 		self.add_release_group()
 
 	def add_release_group(self):
@@ -137,6 +138,18 @@ class SupportAccess(Document):
 		if hours and doc_before and doc_before.status != self.status and self.status == "Accepted":
 			self.access_allowed_till = frappe.utils.add_to_date(frappe.utils.now_datetime(), hours=hours)
 
+	def resolve_sites(self):
+		for resource in self.resources:
+			if resource.document_type == "Site":
+				resource.document_name = self.resolve_site_name(resource.document_name)
+
+	def resolve_site_name(self, site) -> str:
+		try:
+			domain = frappe.get_doc("Site Domain", site)
+			return domain.site
+		except frappe.DoesNotExistError:
+			return site
+
 	def validate(self):
 		self.validate_status_change()
 		self.validate_expiry()
@@ -147,9 +160,12 @@ class SupportAccess(Document):
 		"""
 		Returns the possible target statuses for the current user.
 		"""
-		if self.target_team == get_current_team():
+		current_team = get_current_team()
+		if self.target_team == current_team:
 			return ["Accepted", "Rejected", "Revoked"]
-		return ["Pending", "Forfeited"]
+		if self.requested_team == current_team:
+			return ["Pending", "Forfeited"]
+		return []
 
 	def is_valid_status_transition(self, status_from: str, status_to: str) -> bool:
 		"""
@@ -196,18 +212,24 @@ class SupportAccess(Document):
 		self.notify_on_request()
 
 	def on_update(self):
-		doc_before = self.get_doc_before_save()
-		if doc_before and doc_before.status != self.status:
-			self.notify_on_status_change()
+		self.notify_on_status_change()
 
 	def notify_on_status_change(self):
+		if not self.has_value_changed("status"):
+			return
+
 		title = f"Access Request {self.status}"
 		message = f"Your request for support access has been {self.status.lower()}."
+		recipient = self.requested_by
+
+		if self.status == "Forfeited":
+			message = "Support access has been forfieted."
+			recipient = self.target_team
 
 		frappe.sendmail(
 			subject=title,
 			message=message,
-			recipients=self.requested_by,
+			recipients=recipient,
 			template="access_request_update",
 			args={
 				"status": self.status,
@@ -246,7 +268,6 @@ class SupportAccess(Document):
 			recipients=team_email,
 			template="access_request",
 			args={
-				"requested_by": self.requested_by,
 				"reason": self.reason,
 				"resources": self.resources,
 			},

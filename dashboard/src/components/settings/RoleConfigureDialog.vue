@@ -122,17 +122,27 @@
 									:disabled="adminAccess"
 								/>
 							</div>
-							<div class="space-y-1 rounded border p-4">
+							<div v-if="allowPartner" class="space-y-1 rounded border p-4">
 								<h2 class="mb-2 ml-2 font-semibold">Partner Permissions</h2>
 								<Switch
 									v-model="allowDashboard"
 									label="Allow Dashboard Access"
+									:disabled="adminAccess"
 								/>
-								<Switch v-model="allowLeads" label="Allow Leads Access" />
-								<Switch v-model="allowCustomer" label="Allow Customer Access" />
+								<Switch
+									v-model="allowLeads"
+									label="Allow Leads Access"
+									:disabled="adminAccess"
+								/>
+								<Switch
+									v-model="allowCustomer"
+									label="Allow Customer Access"
+									:disabled="adminAccess"
+								/>
 								<Switch
 									v-model="allowContribution"
 									label="Allow Contribution Access"
+									:disabled="adminAccess"
 								/>
 							</div>
 						</div>

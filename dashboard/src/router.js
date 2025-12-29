@@ -142,6 +142,11 @@ let router = createRouter({
 					path: 'follow-up',
 					component: () => import('./components/partners/LeadFollowup.vue'),
 				},
+				{
+					name: 'LeadActivities',
+					path: 'activities',
+					component: () => import('./components/partners/LeadActivities.vue'),
+				},
 			],
 		},
 		{
@@ -223,9 +228,8 @@ let router = createRouter({
 						},
 						{
 							name: 'SettingsPermissionRolePermissions',
-							path: 'roles/:roleId',
-							component: () =>
-								import('./components/settings/RolePermissions.vue'),
+							path: 'roles/:id',
+							component: () => import('./components/settings/Role.vue'),
 							props: true,
 						},
 					],
@@ -242,6 +246,12 @@ let router = createRouter({
 					name: 'PartnerOverview',
 					path: 'overview',
 					component: () => import('./components/partners/PartnerOverview.vue'),
+				},
+				{
+					name: 'PartnerWebsiteDetails',
+					path: 'website-details',
+					component: () =>
+						import('./components/partners/PartnerWebsiteDetails.vue'),
 				},
 				{
 					name: 'PartnerCustomers',
@@ -263,12 +273,6 @@ let router = createRouter({
 					name: 'PartnerResources',
 					path: 'resources',
 					component: () => import('./components/partners/PartnerResources.vue'),
-				},
-				{
-					name: 'PartnerApprovalRequests',
-					path: 'approval-requests',
-					component: () =>
-						import('./components/partners/PartnerApprovalRequests.vue'),
 				},
 				{
 					name: 'PartnerContributions',
@@ -311,9 +315,14 @@ let router = createRouter({
 					component: () => import('./pages/PartnerAdminCertificates.vue'),
 				},
 				{
-					name: 'PartnerLeadList',
-					path: 'partner-lead-list',
-					component: () => import('./components/partners/PartnerLeads.vue'),
+					name: 'PartnerAdminLeads',
+					path: 'partner-admin-lead-list',
+					component: () => import('./pages/PartnerAdminLeads.vue'),
+				},
+				{
+					name: 'PartnerAdminResources',
+					path: 'admin-resources',
+					component: () => import('./components/partners/PartnerResources.vue'),
 				},
 			],
 		},

@@ -174,10 +174,10 @@ class Incident(WebsiteGenerator):
 			timespan,
 			timespan + 1,
 		)["datasets"]
-		if load == []:
-			ret = -1  # no response
-		else:
+		if load:
 			ret = load[0]["values"][-1]
+		else:
+			ret = -1  # no response
 		self.add_description(f"{name} load avg(5m): {ret if ret != -1 else 'No data'}")
 		return ret
 
@@ -214,7 +214,31 @@ class Incident(WebsiteGenerator):
 		self.identify_affected_resource()  # assume 1 resource; Occam's razor
 		self.identify_problem()
 		self.take_grafana_screenshots()
+		if self.down_bench:
+			self.comment_bench_web_err_log(self.down_bench)
 		self.save()
+
+	def get_last_n_lines_of_log(self, log: str, n: int = 100) -> str:
+		# get last n lines of log
+		lines = log.splitlines()
+		return "\n".join(lines[-n:]) if len(lines) > n else log
+
+	def comment_bench_web_err_log(self, bench_name: str):
+		# get last 100 lines of web.error.log from the bench
+		bench: Bench = Bench("Bench", bench_name)
+		try:
+			log = bench.get_server_log("web.error.log")["web.error.log"]
+		except Exception as e:
+			log = f"Error fetching web.error.log: {e!s}"
+
+		self.add_comment(
+			"Comment",
+			f"""Last 100 lines of web.error.log for bench {bench_name}:<br/><br/>
+<pre class="ql-code-block-container">
+{self.get_last_n_lines_of_log(log)}
+</pre>
+""",
+		)
 
 	@frappe.whitelist()
 	def regather_info_and_screenshots(self):
@@ -325,6 +349,7 @@ class Incident(WebsiteGenerator):
 				self.type = "Database Down"
 				self.subtype = "Disk full"
 				self.categorize_disk_full_issue()
+				self.send_disk_full_mail()
 				return
 			# TODO: Try more random shit if resource isn't identified
 			# Eg: Check mysql up/ docker up/ container up
@@ -430,6 +455,11 @@ class Incident(WebsiteGenerator):
 
 	def add_likely_cause(self, cause: str):
 		self.likely_cause = self.likely_cause + cause + "\n" if self.likely_cause else cause + "\n"
+
+	@cached_property
+	def down_bench(self):
+		down_benches = self.monitor_server.get_benches_down_for_server(str(self.server))
+		return down_benches[0] if down_benches else None
 
 	@frappe.whitelist()
 	def restart_down_benches(self):
@@ -563,20 +593,45 @@ Likely due to insufficient balance or incorrect credentials""",
 		) and ignore_since < frappe.utils.now_datetime():
 			return
 		domain = frappe.db.get_value("Press Settings", None, "domain")
-		incident_link = f"{domain}{self.get_url()}"
-
-		message_body = f"""New Incident {self.name} Reported
-
-Hosted on: {self.server}
-
-Incident URL: {incident_link}"""
+		incident_link = f"https://{domain}{self.get_url()}"
+		message = f"Incident on server: {self.server}\n\nURL: {incident_link}\n\nID: {self.name}"
 		for human in self.get_humans():
-			self.twilio_client.messages.create(
-				to=human.phone, from_=self.twilio_phone_number, body=message_body
-			)
+			self.twilio_client.messages.create(to=human.phone, from_=self.twilio_phone_number, body=message)
 		self.reload()  # In case the phone call status is modified by the investigator before the sms is sent
 		self.sms_sent = 1
 		self.save()
+
+	def send_disk_full_mail(self):
+		title = str(frappe.db.get_value("Server", self.server, "title"))
+		if self.resource_type:
+			title = str(frappe.db.get_value(self.resource_type, self.resource, "title"))
+		subject = f"Disk Full Incident on {title}"
+		message = f"""
+		<p>Dear User,</p>
+		<p>You are receiving this mail as the storage has been filled up on your server: <strong>{self.resource}</strong> and you have <a href="https://docs.frappe.io/cloud/storage-addons#steps-to-disable-auto-increase-storage">automatic addition</a> of storage disabled.</p>
+		<p>Please enable automatic addition of storage or <a href="https://docs.frappe.io/cloud/storage-addons#steps-to-add-storage-manually">add more storage manually</a> to resolve the issue.</p>
+		<p>Best regards,<br/>Frappe Cloud Team</p>
+		"""
+		self.send_mail(subject, message)
+
+	def send_mail(self, subject: str, message: str):
+		try:
+			frappe.sendmail(
+				recipients=get_communication_info("Email", "Server Activity", "Server", self.server),
+				subject=subject,
+				reference_doctype=self.doctype,
+				reference_name=self.name,
+				template="incident",
+				args={
+					"message": message,
+					"link": f"dashboard/servers/{self.server}/analytics/",
+				},
+				now=True,
+			)
+
+		except Exception:
+			# Swallow the exception to avoid breaking the Incident creation
+			log_error("Incident Notification Email Failed")
 
 	def send_email_notification(self):
 		if not self.global_email_alerts_enabled:
@@ -589,22 +644,9 @@ Incident URL: {incident_link}"""
 		team = frappe.db.get_value("Server", self.server, "team")
 		if (not self.server) or (not team):
 			return
-		try:
-			subject = self.get_email_subject()
-			message = self.get_email_message()
-			frappe.sendmail(
-				recipients=get_communication_info("Email", "Server Activity", "Server", self.server),
-				subject=subject,
-				template="incident",
-				args={
-					"message": message,
-					"link": f"dashboard/servers/{self.server}/analytics/",
-				},
-				now=True,
-			)
-		except Exception:
-			# Swallow the exception to avoid breaking the Incident creation
-			log_error("Incident Notification Email Failed")
+		subject = self.get_email_subject()
+		message = self.get_email_message()
+		self.send_mail(subject, message)
 
 	def get_email_subject(self):
 		title = str(frappe.db.get_value("Server", self.server, "title"))

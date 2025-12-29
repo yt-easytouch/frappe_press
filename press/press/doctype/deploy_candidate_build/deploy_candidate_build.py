@@ -12,9 +12,11 @@ import shutil
 import tarfile
 import tempfile
 import typing
+import warnings
 from datetime import datetime, timedelta
 from enum import Enum
 from functools import cached_property
+from urllib.parse import quote
 
 import frappe
 import requests
@@ -30,12 +32,14 @@ from press.agent import Agent
 from press.exceptions import ImageNotFoundInRegistry
 from press.press.doctype.deploy_candidate.deploy_notifications import (
 	create_build_failed_notification,
+	create_build_warning_notification,
 )
 from press.press.doctype.deploy_candidate.docker_output_parsers import (
 	DockerBuildOutputParser,
 	UploadStepUpdater,
 )
 from press.press.doctype.deploy_candidate.utils import (
+	BuildWarning,
 	get_arm_build_server_with_least_active_builds,
 	get_build_server,
 	get_intel_build_server_with_least_active_builds,
@@ -49,6 +53,8 @@ from press.utils.jobs import get_background_jobs, stop_background_job
 from press.utils.webhook import create_webhook_event
 
 if typing.TYPE_CHECKING:
+	from warnings import WarningMessage
+
 	from rq.job import Job
 
 	from press.press.doctype.agent_job.agent_job import AgentJob
@@ -639,10 +645,19 @@ class DeployCandidateBuild(Document):
 
 		return False
 
+	def handle_build_warning(self, title, warning: "WarningMessage") -> None:
+		"""Create warning notification similar to error notifications"""
+		create_build_warning_notification(
+			dc=self.candidate,
+			dcb=self,
+			title=title,
+			message=warning.message,
+		)
+
 	def handle_build_failure(
 		self,
 		exc: Exception | None = None,
-		job: "AgentJob | None" = None,
+		job: AgentJob | None = None,
 	) -> None:
 		self._flush_output_parsers()
 		self.set_status(Status.FAILURE)
@@ -1010,25 +1025,14 @@ class DeployCandidateBuild(Document):
 		self.docker_image_tag = self.name
 		self.docker_image = f"{self.docker_image_repository}:{self.docker_image_tag}"
 
-	def is_image_in_registry(self) -> bool:
+	def check_image_in_registry(self) -> bool:
 		"""Check if the image tag exists on registry"""
 		settings = self._fetch_registry_settings()
-		headers = {"Accept": "application/vnd.docker.distribution.manifest.v2+json"}
-		auth = (settings.docker_registry_username, settings.docker_registry_password)
-		repository = self.docker_image_repository.replace(settings.docker_registry_url, "")
 
 		if settings.docker_registry_url != "registry.frappe.cloud":
 			return True
 
-		response = requests.get(
-			f"https://{settings.docker_registry_url}/v2/{repository}/tags/list", auth=auth, headers=headers
-		)
-
-		if not response.ok:
-			return False
-
-		image_tags = response.json().get("tags")
-		return self.name in image_tags
+		return is_image_in_registry(self.name, self.group, settings)
 
 	def _start_build(self):
 		self._update_docker_image_metadata()
@@ -1043,8 +1047,23 @@ class DeployCandidateBuild(Document):
 		)
 		self._set_output_parsers()
 
+		# https://docs.python.org/3/library/warnings.html#testing-warnings
+		with warnings.catch_warnings(record=True) as caught_warnings:
+			warnings.simplefilter("always", BuildWarning)  # capture everything
+
+			try:
+				self._prepare_build()
+			except Exception as exc:
+				self.handle_build_failure(exc)
+				return
+
+			for warning in caught_warnings:
+				self.handle_build_warning(
+					title="Pre Build Validation Warning",
+					warning=warning,
+				)
+
 		try:
-			self._prepare_build()
 			self._start_build()
 		except Exception as exc:
 			self.handle_build_failure(exc)
@@ -1208,7 +1227,7 @@ class DeployCandidateBuild(Document):
 		return self._create_deploy(servers, check_image_exists=check_image_exists).name
 
 	def _create_deploy(self, servers: list[str], check_image_exists: bool = False):
-		if check_image_exists and not self.is_image_in_registry():
+		if check_image_exists and not self.check_image_in_registry():
 			frappe.throw("Image not found in registry create a new build", ImageNotFoundInRegistry)
 
 		return frappe.get_doc(
@@ -1589,3 +1608,50 @@ def _create_arm_build(deploy_candidate: str) -> DeployCandidateBuild:
 	# Since we don't want loose builds
 	frappe.db.set_value("Deploy Candidate", {"name": deploy_candidate}, "arm_build", arm_build.name)
 	return arm_build.name
+
+
+def query_digitalocean_registry(image: str, group: str, settings: dict[str, str]) -> bool:
+	headers = {
+		"Authorization": f"Bearer {settings['docker_registry_password']}",
+		"Accept": "Content-Type: application/json",
+	}
+	repo = f"{settings['domain']}/{group}"
+	encoded_repo = quote(repo, safe="")
+
+	url = (
+		"https://api.digitalocean.com/v2/registry/"
+		f"{settings['docker_registry_namespace']}/repositories/{encoded_repo}/tags"
+	)
+
+	response = requests.get(url, headers=headers)
+
+	if not response.ok:
+		return False
+
+	tags = response.json().get("tags")
+
+	return any(image == tag_metadata["tag"] for tag_metadata in tags)
+
+
+def is_image_in_registry(image: str, group: str, settings: dict[str, str]) -> bool:
+	headers = {"Accept": "application/vnd.docker.distribution.manifest.v2+json"}
+	auth = (settings["docker_registry_username"], settings["docker_registry_password"])
+	namespace = (
+		f"{settings['docker_registry_namespace']}/{settings['domain']}"
+		if settings["docker_registry_namespace"]
+		else settings["domain"]
+	)
+	registry = settings["docker_registry_url"]
+
+	if registry == "registry.digitalocean.com":
+		return query_digitalocean_registry(image, group, settings)
+
+	url = f"https://{registry}/v2/{namespace}/{group}/tags/list"
+
+	response = requests.get(url, auth=auth, headers=headers)
+
+	if not response.ok:
+		return False
+
+	image_tags = response.json().get("tags")
+	return image in image_tags
