@@ -17,7 +17,7 @@ from frappe.utils import cstr
 from frappe.utils import now_datetime as now
 
 from press.press.doctype.ansible_play.ansible_play import AnsiblePlay
-
+from press.utils import fmt_timedelta, log_error
 
 def reconnect_on_failure():
 	@wrapt.decorator
@@ -55,6 +55,16 @@ class AnsibleCallback(CallbackBase):
 
 	def v2_runner_on_failed(self, result, *args, **kwargs):
 		self.update_task("Failure", result)
+		log_error(
+				"Ansible Task Failed",
+				play=self.play,
+				task=result._task.name,
+				host=result._host.get_name(),
+				error=result._result.get("msg"),
+				stdout=result._result.get("stdout"),
+				stderr=result._result.get("stderr"),
+				result=result._result
+			)
 
 	def v2_runner_on_skipped(self, result):
 		self.update_task("Skipped", result)

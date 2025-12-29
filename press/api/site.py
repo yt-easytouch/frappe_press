@@ -1843,7 +1843,7 @@ def check_domain_proxied(domain) -> str | None:
 			return server
 
 
-def _check_dns_cname_a(name, domain, ignore_proxying=False):
+def _check_dns_cname_a(name, domain, ignore_proxying=True):
 	check_domain_allows_letsencrypt_certs(domain)
 	ensure_dns_aaaa_record_doesnt_exist(domain)
 	cname = check_dns_cname(name, domain)
@@ -1870,14 +1870,14 @@ def _check_dns_cname_a(name, domain, ignore_proxying=False):
 		)
 
 	proxy = check_domain_proxied(domain)
-	if proxy:
-		if ignore_proxying:  # no point checking the rest if proxied
-			return {"CNAME": {}, "A": {}, "matched": True, "type": "A"}  # assume A
-		frappe.throw(
-			f"""Domain <b>{domain}</b> appears to be proxied (server: <b>{proxy}</b>). Please turn off proxying{get_dns_provider_link_substr(domain)} and try again in some time.
-			<br>You may enable it once the domain is verified.""",
-			DomainProxied,
-		)
+	# if proxy:
+	# 	if ignore_proxying:  # no point checking the rest if proxied
+	# 		return {"CNAME": {}, "A": {}, "matched": True, "type": "A"}  # assume A
+	# 	frappe.throw(
+	# 		f"""Domain <b>{domain}</b> appears to be proxied (server: <b>{proxy}</b>). Please turn off proxying{get_dns_provider_link_substr(domain)} and try again in some time.
+	# 		<br>You may enable it once the domain is verified.""",
+	# 		DomainProxied,
+	# 	)
 
 	result["valid"] = cname["matched"] or a["matched"]
 	return result

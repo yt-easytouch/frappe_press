@@ -102,6 +102,6 @@ frappe.ui.form.on('Release Group', {
 			__('Actions'),
 		);
 
-		frm.set_df_property('dependencies', 'cannot_add_rows', 1);
+		// frm.set_df_property('dependencies', 'cannot_add_rows', 1);
 	},
 });
