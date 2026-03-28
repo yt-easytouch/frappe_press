@@ -65,7 +65,7 @@ def get_context(context):
 	)
 	context.metatags = {
 		"title": "Frappe Cloud Marketplace",
-		"description": "One Click Apps for your Frappe Sites",
+		"description": "One Click Apps for your Easytouch Site",
 		"og:type": "website",
 	}
 
