@@ -51,22 +51,22 @@
   become: true
   when: enabled | bool
 
-- name: Add bypass rules
+- name: Bypass protected IPs
   ufw:
-    rule: "{{ item.action | lower }}"
-    from_ip: "{{ item.source | default('any') }}"
-    to_ip: "{{ item.destination | default('any') }}"
-    proto: "{{ item.protocol | lower }}"
-  loop: "{{ rules_bypass }}"
+    rule: allow
+    from_ip: "{{ item }}"
+    direction: 'in'
+  loop: "{{ protected_ips }}"
   become: true
   when: enabled | bool
 
-- name: Add user rules
+- name: Add rules
   ufw:
     rule: "{{ item.action | lower }}"
-    from_ip: "{{ item.source | default('any') }}"
-    to_ip: "{{ item.destination | default('any') }}"
-    proto: "{{ item.protocol | lower }}"
+    from_ip: "{{ item.source | default(omit) }}"
+    port: "{{ item.port | default(omit) }}"
+    proto: "{{ item.protocol | default(omit) | lower }}"
+    direction: 'in'
   loop: "{{ rules }}"
   become: true
   when: enabled | bool

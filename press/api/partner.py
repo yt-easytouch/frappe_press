@@ -661,23 +661,69 @@ def get_partner_customers():
 
 @frappe.whitelist()
 @role_guard.api("partner")
-def get_partner_leads(lead_name=None, status=None, engagement_stage=None, source=None):
+def get_partner_leads(lead_name=None, status=None, source=None, is_starter_pack=None, lead_owner=None):
 	team = get_current_team()
 	filters = {"partner_team": team}
 	if lead_name:
 		filters["lead_name"] = ("like", f"%{lead_name}%")
-	if status:
+	if status and status != "All":
 		filters["status"] = status
-	if engagement_stage:
-		filters["engagement_stage"] = engagement_stage
-	if source:
+	if source and source != "All":
 		filters["lead_source"] = source
+	if lead_owner and lead_owner != "All":
+		filters["lead_owner"] = lead_owner
+	if is_starter_pack:
+		filters["is_starter_pack"] = is_starter_pack
 	return frappe.get_all(
 		"Partner Lead",
 		filters,
 		["name", "organization_name", "lead_name", "status", "lead_source", "partner_team"],
 		order_by="modified desc",
 	)
+
+
+@frappe.whitelist()
+@role_guard.api("partner")
+def get_lead_owners():
+	PartnerLead = frappe.qb.DocType("Partner Lead")
+	User = frappe.qb.DocType("User")
+	query = (
+		frappe.qb.from_(PartnerLead)
+		.join(User)
+		.on(PartnerLead.lead_owner == User.name)
+		.select(PartnerLead.lead_owner, User.full_name)
+		.distinct()
+		.groupby(PartnerLead.lead_owner)
+	)
+	owners = query.run(as_dict=True)
+	return [{"label": d.full_name, "value": d.lead_owner} for d in owners]
+
+
+@frappe.whitelist()
+@role_guard.api("partner")
+def create_audit_request(audit_date, audit_type="Online"):
+	team = get_current_team(get_doc=True)
+	if not team.erpnext_partner and team.partner_status != "Active":
+		frappe.throw(
+			"Only Active Partner team can create audit request. Please ensure your partner status is renewed and active."
+		)
+
+	if frappe.db.exists("Partner Audit", {"partner_team": team.name, "audit_date": audit_date}):
+		frappe.throw(
+			"An audit request already exists for this date. Please select a different date or check your existing requests."
+		)
+
+	if frappe.utils.getdate(audit_date) <= frappe.utils.getdate():
+		frappe.throw("Audit date must be in the future. Please choose a date later than today's date.")
+
+	try:
+		doc = frappe.new_doc("Partner Audit")
+		doc.partner_team = team.name
+		doc.proposed_audit_date = audit_date
+		doc.mode_of_audit = audit_type
+		doc.insert(ignore_permissions=True)
+	except Exception:
+		frappe.log_error("Error creating new Partner audit")
 
 
 @frappe.whitelist()
@@ -821,7 +867,7 @@ def update_lead_status(lead_name, status, **kwargs):  # noqa: C901
 				}
 			)
 	elif status == "Won":
-		site = kwargs.get("site_url").removeprefix("https://").removeprefix("http://")
+		site = kwargs.get("site_url").removeprefix("https://").removeprefix("http://").split("/")[0]
 		server = kwargs.get("server_name")
 		team = kwargs.get("team_name")
 
@@ -904,7 +950,7 @@ def calculate_total_amount(server_name):
 	ServerPlan = frappe.qb.DocType("Server Plan")
 	query = (
 		frappe.qb.from_(ServerPlan)
-		.select(Sum(ServerPlan.price_inr).as_("total_amount"))
+		.select(Sum(ServerPlan.price_usd).as_("total_amount"))
 		.where(
 			ServerPlan.name.isin([server_plan, db_server_plan]),
 		)
@@ -918,7 +964,7 @@ def calculate_total_team_amount(team_name):
 
 	total_amount = 0
 	for d in subscriptions:
-		total_amount += frappe.db.get_value(d.plan_type, d.plan, "price_inr") or 0
+		total_amount += frappe.db.get_value(d.plan_type, d.plan, "price_usd") or 0
 
 	return total_amount
 
@@ -966,37 +1012,31 @@ def update_followup_details(id, lead, followup_details):
 		frappe.throw("You are not allowed to update this followup")
 
 	followup_details = frappe._dict(followup_details)
-	if id:
-		doc = frappe.get_doc("Lead Followup", id)
-		doc.update(
-			{
-				"date": frappe.utils.getdate(followup_details.followup_date),
-				"communication_type": followup_details.communication_type,
-				"followup_by": followup_details.followup_by,
-				"spoke_to": followup_details.spoke_to,
-				"designation": followup_details.designation,
-				"discussion": followup_details.discussion,
-				"no_show": followup_details.no_show,
-			}
-		)
-		doc.save(ignore_permissions=True)
+	doc = frappe.get_doc("Partner Lead", lead)
+	if doc.followup and [row.name for row in doc.followup if row.name == id]:
+		for row in doc.followup:
+			if row.name == id:
+				row.date = frappe.utils.getdate(followup_details.followup_date)
+				row.communication_type = followup_details.communication_type
+				row.followup_by = followup_details.followup_by
+				row.spoke_to = followup_details.spoke_to
+				row.designation = followup_details.designation
+				row.discussion = followup_details.discussion
+
 	else:
-		doc = frappe.new_doc("Lead Followup")
-		doc.update(
+		doc.append(
+			"followup",
 			{
-				"parent": lead,
-				"parenttype": "Partner Lead",
-				"parentfield": "followup",
 				"date": frappe.utils.getdate(followup_details.followup_date),
 				"communication_type": followup_details.communication_type,
 				"followup_by": followup_details.followup_by,
 				"spoke_to": followup_details.spoke_to,
 				"designation": followup_details.designation,
 				"discussion": followup_details.discussion,
-				"no_show": followup_details.no_show,
-			}
+			},
 		)
-		doc.insert(ignore_permissions=True)
+
+	doc.save(ignore_permissions=True)
 	doc.reload()
 
 

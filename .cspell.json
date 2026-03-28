@@ -14,7 +14,8 @@
         "**.conf",
         "requirements.txt",
         "press/utils/country_timezone.py",
-        ".secrets.baseline"
+        ".secrets.baseline",
+        "**go.sum"
     ],
     "words": [
         "2.4.6",
@@ -75,6 +76,7 @@
         "bouy",
         "buildx",
         "Busingen",
+        "Billing",
         "Cabo",
         "CCONTENT",
         "cellbuf",
@@ -169,6 +171,7 @@
         "elif",
         "elts",
         "emaill",
+        "emandate",
         "Ensenada",
         "EPERM",
         "equivs",
@@ -215,6 +218,7 @@
         "Fzqt",
         "gcore",
         "Gekx",
+        "gaierror",
         "genproto",
         "getdate",
         "getitimer",
@@ -407,6 +411,7 @@
         "mysqld",
         "mysqldb",
         "Mywk",
+        "nach",
         "Nadu",
         "Nagar",
         "ncdu",
@@ -446,6 +451,7 @@
         "Ojinaga",
         "Olgu",
         "OLQY",
+        "ondismiss",
         "onfail",
         "oom",
         "opasswd",
@@ -747,7 +753,18 @@
         "pyotp",
         "noopener",
         "noreferrer",
+        "nosemgrep",
         "centralise",
-        "serialised"
+        "PSIIO",
+        "journalctl",
+        "ptrs",
+        "serialised",
+        "setnx",
+        "vitepress",
+        "resolvconf",
+        "lsync",
+        "lsyncd",
+        "awk",
+        "gawk"
     ]
 }

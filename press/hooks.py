@@ -207,6 +207,7 @@ scheduler_events = {
 		"press.press.doctype.database_server.database_server.delete_mariadb_binlog_for_archived_servers",
 		"press.press.doctype.team.team.check_budget_alerts",
 		"press.press.doctype.site.site.archive_creation_failed_sites",
+		"press.press.doctype.server.server.process_running_benches_on_server",
 	],
 	"daily_long": [
 		"press.press.audit.check_bench_fields",
@@ -229,6 +230,7 @@ scheduler_events = {
 		"press.press.doctype.registry_server.registry_server.delete_old_images_from_registry",
 		"press.saas.doctype.product_trial_request.product_trial_request.gather_daily_stats",
 		"press.press.doctype.agent_job.agent_job.agent_poll_count_stats_daily",
+		"press.press.doctype.site_backup.site_backup.delete_backups_for_archived_sites_after_retention",
 	],
 	"hourly": [
 		"press.press.doctype.site.backups.cleanup_local",
@@ -247,7 +249,6 @@ scheduler_events = {
 		"press.saas.doctype.product_trial.product_trial.sync_product_site_users",
 		"press.press.doctype.database_server.database_server.sync_binlogs_info",
 		"press.press.doctype.team.team.auto_enable_ssh_access_for_7_days_older_teams",
-		"press.press.doctype.database_server.database_server.update_database_schema_sizes",
 	],
 	"hourly_long": [
 		"press.press.doctype.release_group.release_group.prune_servers_without_sites",
@@ -256,6 +257,7 @@ scheduler_events = {
 		"press.press.doctype.usage_record.usage_record.link_unlinked_usage_records",
 		"press.press.doctype.bench.bench.sync_benches",
 		"press.press.doctype.invoice.invoice.finalize_draft_invoices",
+		"press.press.doctype.invoice.invoice.finalize_razorpay_mandate_invoices",
 		"press.press.doctype.agent_job.agent_job.fail_old_jobs",
 		"press.press.doctype.press_job.press_job.fail_stuck_press_jobs",
 		"press.press.doctype.site_update.site_update.mark_stuck_updates_as_fatal",
@@ -298,6 +300,9 @@ scheduler_events = {
 			"press.press.doctype.drip_email.drip_email.send_drip_emails",
 			"press.press.doctype.virtual_disk_snapshot.virtual_disk_snapshot.sync_all_snapshots_from_aws",
 		],
+		"30 2-23/5 * * *": [
+			"press.press.doctype.database_server.database_server.update_database_schema_sizes",
+		],
 		"* * * * * 0/5": [
 			"press.press.doctype.agent_job.agent_job.poll_pending_jobs",
 			"press.press.doctype.press_webhook_log.press_webhook_log.process",
@@ -306,6 +311,7 @@ scheduler_events = {
 			"press.press.doctype.press_job.press_job.process_failed_callbacks",
 			"press.press.doctype.server_snapshot_recovery.server_snapshot_recovery.resume_warmed_up_restorations",
 			"press.press.doctype.server_snapshot.server_snapshot.move_pending_snapshots_to_processing",
+			"press.press.doctype.bench.bench.process_bench_queue",
 		],
 		"* * * * * 0/30": [
 			"press.press.doctype.account_request.account_request.expire_request_key",
@@ -362,6 +368,10 @@ scheduler_events = {
 		"*/30 * * * *": [
 			"press.press.doctype.site_update.scheduled_auto_updates.trigger",
 			"press.press.doctype.team.suspend_sites.execute",
+			"press.press.doctype.site_backup.site_backup.delete_successful_unavailable_backups_for_archived_sites",
+			"press.press.doctype.site_backup.site_backup.delete_failed_unavailable_backups_for_archived_sites",
+			"press.press.doctype.site_backup.site_backup.delete_agent_job_records_for_archived_sites",
+			"press.press.doctype.site_backup.site_backup.delete_site_activity_records_for_archived_sites",
 		],
 		"15,45 * * * *": [
 			"press.press.doctype.site.site_usages.update_cpu_usages",
