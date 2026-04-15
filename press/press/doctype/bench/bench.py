@@ -1325,7 +1325,6 @@ def cancel_and_retry_bench_job_if_required(job: AgentJob) -> bool:
 	if retry_count >= 3:
 		# We can't retry anymore so accept the fate and proceed with archival with job processing
 		return False
-
 	job.cancel_job()
 
 	frappe.db.set_value("Agent Job", job.name, "status", "Failure")

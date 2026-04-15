@@ -6,17 +6,18 @@ import PanelTopInactive from '~icons/lucide/panel-top-inactive';
 import Boxes from '~icons/lucide/boxes';
 import Server from '~icons/lucide/server';
 import WalletCards from '~icons/lucide/wallet-cards';
+import Key from '~icons/lucide/key';
 import Settings from '~icons/lucide/settings';
 import App from '~icons/lucide/layout-grid';
 import DatabaseZap from '~icons/lucide/database-zap';
 import Activity from '~icons/lucide/activity';
 import Logs from '~icons/lucide/scroll-text';
 import Globe from '~icons/lucide/globe';
+import Notification from '~icons/lucide/inbox';
 import Code from '~icons/lucide/code';
 import FileSearch from '~icons/lucide/file-search';
 import NotificationPanel from './Notifications.vue';
 import SearchItem from './SearchItem.vue';
-
 import { unreadNotificationsCount } from '@/data/notifications';
 
 import { getTeam } from '@/data/team';
@@ -48,7 +49,6 @@ const navigation = computed(() => {
 			isActive: routeName === 'Welcome',
 			condition: !onboardingComplete,
 		},
-
 		{
 			customComponent: SearchItem,
 		},
@@ -57,6 +57,9 @@ const navigation = computed(() => {
 			name: 'Notifications',
 			condition: onboardingComplete && !isSaasUser,
 			customComponent: NotificationPanel,
+			spacer: true,
+			disabled: enforce2FA,
+		},
 			disabled: enforce2FA,
 		},
 		{
@@ -96,7 +99,7 @@ const navigation = computed(() => {
 		{
 			name: 'Servers',
 			icon: Server,
-			class: 'mt-2',
+			spacer: true,
 			route: onboardingComplete ? '/servers' : '/enable-servers',
 			isActive:
 				['New Server'].includes(routeName) ||
@@ -163,6 +166,14 @@ const navigation = computed(() => {
 			disabled: enforce2FA,
 		},
 		{
+		{
+			name: 'Access Requests',
+			icon: Key,
+			route: '/access-requests',
+			isActive: routeName === 'Access Requests',
+			disabled: enforce2FA,
+		},
+		{
 			name: 'Partnership',
 			icon: Globe,
 			route: '/partners',
@@ -179,7 +190,7 @@ const navigation = computed(() => {
 		},
 		{
 			name: 'Status',
-			icon: LucideActivity,
+			icon: () => h(Globe),
 			route: '/status',
 			isActive: routeName === 'Status',
 			disabled: enforce2FA,

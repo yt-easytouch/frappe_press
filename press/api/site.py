@@ -276,7 +276,6 @@ def get_group_for_new_site_and_set_localisation_app(site, apps):
 def validate_plan(server: str, plan: str) -> None:
 	if not frappe.db.exists("Site Plan", plan):
 		frappe.throw(f"Plan {plan} does not exist", frappe.DoesNotExistError)  # nosemgrep
-
 	site_plan = frappe.db.get_value(
 		"Site Plan",
 		plan,
@@ -289,7 +288,10 @@ def validate_plan(server: str, plan: str) -> None:
 		as_dict=True,
 	)
 
-	if site_plan.get("price_usd", 0) > 0:
+	if (
+		site_plan.get("price_usd", 0) > 0
+		or site_plan.get("dedicated_server_plan", 0) == 1
+	):
 		return
 
 	if (
@@ -1103,6 +1105,9 @@ def set_bench_and_clusters(version, for_bench):
 
 		filters = {"name": ("in", allowed_cluster_names)}
 
+		if not get_current_team(get_doc=True).is_frappe_compute_internal_user:
+			filters["cloud_provider"] = ("!=", "Frappe Compute")
+
 		version.group.clusters = frappe.db.get_all(
 			"Cluster",
 			filters=filters,
@@ -1124,6 +1129,9 @@ def get_additional_clusters_for_private_benches(existing_clusters, cloud_provide
 		return []
 
 	filters = {"parent": ("in", private_bench_site_plans_providers)}
+
+	if not get_current_team(get_doc=True).is_frappe_compute_internal_user:
+		filters["name"] = ("!=", "Frappe Compute")
 
 	allowed_providers = frappe.db.get_all(
 		"Cloud Providers",

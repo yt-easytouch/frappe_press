@@ -266,7 +266,7 @@ class Cluster(Document):
 			network = client.vpcs.create(
 				{
 					"name": f"Frappe - Cloud - {self.name}".replace(" ", ""),
-					"description": f"VPC for Frappe Cloud {self.name} Cluster",
+					"description": f"VPC for Easytouch Cloud {self.name} Cluster",
 					"region": self.region,
 					"ip_range": self.cidr_block,
 				}
@@ -296,7 +296,7 @@ class Cluster(Document):
 		existing_firewalls = [
 			fw
 			for fw in firewalls
-			if fw["name"] == f"Frappe Cloud - {self.name} - Proxy - Security Group".replace(" ", "")
+			if fw["name"] == f"Easytouch Cloud - {self.name} - Proxy - Security Group".replace(" ", "")
 		]
 		if existing_firewalls:
 			self.proxy_security_group_id = existing_firewalls[0]["id"]
@@ -305,7 +305,7 @@ class Cluster(Document):
 		try:
 			firewall = client.firewalls.create(
 				{
-					"name": f"Frappe Cloud - {self.name} - Proxy - Security Group".replace(" ", ""),
+					"name": f"Easytouch Cloud - {self.name} - Proxy - Security Group".replace(" ", ""),
 					"inbound_rules": [
 						{"protocol": "tcp", "ports": "2222", "sources": {"addresses": ["0.0.0.0/0"]}},
 						{"protocol": "tcp", "ports": "3306", "sources": {"addresses": ["0.0.0.0/0"]}},
@@ -328,7 +328,7 @@ class Cluster(Document):
 		existing_firewalls = [
 			fw
 			for fw in firewalls
-			if fw["name"] == f"Frappe Cloud - {self.name} - Security Group".replace(" ", "")
+			if fw["name"] == f"Easytouch Cloud - {self.name} - Security Group".replace(" ", "")
 		]
 		if existing_firewalls:
 			self.security_group_id = existing_firewalls[0]["id"]
@@ -337,7 +337,7 @@ class Cluster(Document):
 		try:
 			firewall = client.firewalls.create(
 				{
-					"name": f"Frappe Cloud - {self.name} - Security Group".replace(" ", ""),
+					"name": f"Easytouch Cloud - {self.name} - Security Group".replace(" ", ""),
 					"inbound_rules": [
 						{"protocol": "tcp", "ports": "80", "sources": {"addresses": ["0.0.0.0/0"]}},
 						{"protocol": "tcp", "ports": "443", "sources": {"addresses": ["0.0.0.0/0"]}},
@@ -392,7 +392,7 @@ class Cluster(Document):
 
 			# Create the network (VPC) on Hetzner
 			network = client.networks.create(
-				name=f"Frappe Cloud - {self.name}",
+				name=f"Easytouch Cloud - {self.name}",
 				ip_range=self.cidr_block,  # The IP range for the entire network (CIDR)
 				subnets=[
 					NetworkSubnet(
@@ -423,7 +423,7 @@ class Cluster(Document):
 		try:
 			# Create Server Firewall
 			server_firewall = client.firewalls.create(
-				name=f"Frappe Cloud - {self.name} - Security Group",
+				name=f"Easytouch Cloud - {self.name} - Security Group",
 				rules=[
 					HetznerFirewallRule(
 						description="HTTP from anywhere",
@@ -491,7 +491,7 @@ class Cluster(Document):
 		try:
 			# Create Proxy Server Firewall
 			proxy_firewall = client.firewalls.create(
-				f"Frappe Cloud - {self.name} - Proxy - Security Group",
+				f"Easytouch Cloud - {self.name} - Proxy - Security Group",
 				rules=[
 					HetznerFirewallRule(
 						description="SSH proxy from anywhere",
@@ -575,7 +575,7 @@ class Cluster(Document):
 			TagSpecifications=[
 				{
 					"ResourceType": "vpc",
-					"Tags": [{"Key": "Name", "Value": f"Frappe Cloud - {self.name}"}],
+					"Tags": [{"Key": "Name", "Value": f"Easytouch Cloud - {self.name}"}],
 				},
 			],
 			CidrBlock=self.cidr_block,
@@ -591,7 +591,7 @@ class Cluster(Document):
 					"Tags": [
 						{
 							"Key": "Name",
-							"Value": f"Frappe Cloud - {self.name} - Public Subnet",
+							"Value": f"Easytouch Cloud - {self.name} - Public Subnet",
 						}
 					],
 				},
@@ -609,7 +609,7 @@ class Cluster(Document):
 					"Tags": [
 						{
 							"Key": "Name",
-							"Value": f"Frappe Cloud - {self.name} - Internet Gateway",
+							"Value": f"Easytouch Cloud - {self.name} - Internet Gateway",
 						},
 					],
 				},
@@ -633,7 +633,7 @@ class Cluster(Document):
 
 		client.create_tags(
 			Resources=[self.route_table_id],
-			Tags=[{"Key": "Name", "Value": f"Frappe Cloud - {self.name} - Route Table"}],
+			Tags=[{"Key": "Name", "Value": f"Easytouch Cloud - {self.name} - Route Table"}],
 		)
 
 		response = client.describe_network_acls(
@@ -642,11 +642,11 @@ class Cluster(Document):
 		self.network_acl_id = response["NetworkAcls"][0]["NetworkAclId"]
 		client.create_tags(
 			Resources=[self.network_acl_id],
-			Tags=[{"Key": "Name", "Value": f"Frappe Cloud - {self.name} - Network ACL"}],
+			Tags=[{"Key": "Name", "Value": f"Easytouch Cloud - {self.name} - Network ACL"}],
 		)
 
 		response = client.create_security_group(
-			GroupName=f"Frappe Cloud - {self.name} - Security Group",
+			GroupName=f"Easytouch Cloud - {self.name} - Security Group",
 			Description="Allow Everything",
 			VpcId=self.vpc_id,
 			TagSpecifications=[
@@ -655,7 +655,7 @@ class Cluster(Document):
 					"Tags": [
 						{
 							"Key": "Name",
-							"Value": f"Frappe Cloud - {self.name} - Security Group",
+							"Value": f"Easytouch Cloud - {self.name} - Security Group",
 						},
 					],
 				},
@@ -758,7 +758,7 @@ class Cluster(Document):
 	def create_proxy_security_group(self):
 		client = self.get_aws_client()
 		response = client.create_security_group(
-			GroupName=f"Frappe Cloud - {self.name} - Proxy - Security Group",
+			GroupName=f"Easytouch Cloud - {self.name} - Proxy - Security Group",
 			Description="Allow Everything on Proxy",
 			VpcId=self.vpc_id,
 			TagSpecifications=[
@@ -767,7 +767,7 @@ class Cluster(Document):
 					"Tags": [
 						{
 							"Key": "Name",
-							"Value": f"Frappe Cloud - {self.name} - Proxy - Security Group",
+							"Value": f"Easytouch Cloud - {self.name} - Proxy - Security Group",
 						},
 					],
 				},
@@ -798,10 +798,11 @@ class Cluster(Document):
 			],
 		)
 
+	@frappe.whitelist()
 	def create_nat_security_group(self):
 		client = self.get_aws_client()
 		response = client.create_security_group(
-			GroupName=f"Frappe Cloud - {self.name} - NAT - Security Group",
+			GroupName=f"Easytouch Cloud - {self.name} - NAT - Security Group",
 			Description="Allow Inbound Traffic on NAT",
 			VpcId=self.vpc_id,
 			TagSpecifications=[
@@ -810,7 +811,7 @@ class Cluster(Document):
 					"Tags": [
 						{
 							"Key": "Name",
-							"Value": f"Frappe Cloud - {self.name} - NAT - Security Group",
+							"Value": f"Easytouch Cloud - {self.name} - NAT - Security Group",
 						},
 					],
 				},
@@ -916,7 +917,7 @@ class Cluster(Document):
 		vcn = vcn_client.create_vcn(
 			CreateVcnDetails(
 				compartment_id=self.oci_tenancy,
-				display_name=f"Frappe Cloud - {self.name}",
+				display_name=f"Easytouch Cloud - {self.name}",
 				cidr_block=self.subnet_cidr_block,
 			)
 		).data
@@ -932,7 +933,7 @@ class Cluster(Document):
 		security_group = vcn_client.create_network_security_group(
 			CreateNetworkSecurityGroupDetails(
 				compartment_id=self.oci_tenancy,
-				display_name=f"Frappe Cloud - {self.name} - Security Group",
+				display_name=f"Easytouch Cloud - {self.name} - Security Group",
 				vcn_id=self.vpc_id,
 			)
 		).data
@@ -999,7 +1000,7 @@ class Cluster(Document):
 		proxy_security_group = vcn_client.create_network_security_group(
 			CreateNetworkSecurityGroupDetails(
 				compartment_id=self.oci_tenancy,
-				display_name=f"Frappe Cloud - {self.name} - Proxy - Security Group",
+				display_name=f"Easytouch Cloud - {self.name} - Proxy - Security Group",
 				vcn_id=self.vpc_id,
 			)
 		).data
@@ -1045,7 +1046,7 @@ class Cluster(Document):
 		subnet = vcn_client.create_subnet(
 			CreateSubnetDetails(
 				compartment_id=self.oci_tenancy,
-				display_name=f"Frappe Cloud - {self.name} - Public Subnet",
+				display_name=f"Easytouch Cloud - {self.name} - Public Subnet",
 				vcn_id=self.vpc_id,
 				cidr_block=self.subnet_cidr_block,
 				route_table_id=self.route_table_id,
@@ -1059,7 +1060,7 @@ class Cluster(Document):
 		internet_gateway = vcn_client.create_internet_gateway(
 			CreateInternetGatewayDetails(
 				compartment_id=self.oci_tenancy,
-				display_name=f"Frappe Cloud - {self.name} - Internet Gateway",
+				display_name=f"Easytouch Cloud - {self.name} - Internet Gateway",
 				is_enabled=True,
 				vcn_id=self.vpc_id,
 			)
@@ -1368,7 +1369,7 @@ class Cluster(Document):
 
 	def create_aws_firewall(self, rules: list[tuple[str | int, str]], is_ingress: bool, description: str):
 		client = self.get_aws_client()
-		sg_name = f"Frappe Cloud - {self.name} - Custom - {frappe.generate_hash(length=4)}"
+		sg_name = f"Easytouch Cloud - {self.name} - Custom - {frappe.generate_hash(length=4)}"
 		response = client.create_security_group(
 			GroupName=sg_name,
 			Description=description or "Custom Security Group",
@@ -1412,7 +1413,7 @@ class Cluster(Document):
 			firewall_rules.append(HetznerFirewallRule(**rule_params))
 
 		firewall_response = client.firewalls.create(
-			name=f"Frappe Cloud - {self.name} - Custom - {frappe.generate_hash(length=4)}",
+			name=f"Easytouch Cloud - {self.name} - Custom - {frappe.generate_hash(length=4)}",
 			rules=firewall_rules,
 		)
 		return firewall_response.firewall.id
@@ -1422,7 +1423,7 @@ class Cluster(Document):
 		security_group = vcn_client.create_network_security_group(
 			CreateNetworkSecurityGroupDetails(
 				compartment_id=self.oci_tenancy,
-				display_name=f"Frappe Cloud - {self.name} - Custom - {frappe.generate_hash(length=4)}",
+				display_name=f"Easytouch Cloud - {self.name} - Custom - {frappe.generate_hash(length=4)}",
 				vcn_id=self.vpc_id,
 			)
 		).data
@@ -1701,7 +1702,7 @@ class Cluster(Document):
 					server.auto_purge_binlog_based_on_size = True
 					server.binlog_max_disk_usage_percent = 20
 
-				server.nat_server = nat_server
+				self._add_nat_server_if_supported(server)
 			case "Server":
 				server = vm.create_server(is_secondary=is_secondary, primary=primary)
 				server.title = f"{title} - Application" if not is_secondary else title
@@ -1720,7 +1721,7 @@ class Cluster(Document):
 				server.new_worker_allocation = True
 				server.auto_increase_storage = auto_increase_storage
 				server.is_for_recovery = is_for_recovery
-				server.nat_server = nat_server
+				self._add_nat_server_if_supported(server)
 			case "Proxy Server":
 				server = vm.create_proxy_server()
 				server.title = f"{title} - Proxy"
@@ -1758,6 +1759,8 @@ class Cluster(Document):
 		# Temporarily here to skip the Frappe Compute cloud provider
 		filters = {"name": ("in", cluster_names), "public": True}
 
+		if not get_current_team(get_doc=True).is_frappe_compute_internal_user:
+			filters["cloud_provider"] = ("!=", "Frappe Compute")
 		return frappe.db.get_all(
 			"Cluster",
 			filters={**filters, **extra_filters},
@@ -1832,3 +1835,8 @@ class Cluster(Document):
 				)
 			return nat_server
 		return None
+
+	def _add_nat_server_if_supported(self, server):
+		nat_server = self.get_nat_server_if_supported()
+		if nat_server:
+			server.nat_server = nat_server

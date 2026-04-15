@@ -1,4 +1,5 @@
 ---
+
 - name: Add NAT gateway
   copy:
     dest: /etc/netplan/99-custom-gateway.yaml
