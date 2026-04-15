@@ -3584,6 +3584,7 @@ class Site(Document, TagHelpers):
 
 	@frappe.whitelist()
 	def forcefully_remove_site(self, bench):
+		return {"error": "This action is not allowed"}
 		"""Bypass all agent/press callbacks and just remove this site from the target bench/server"""
 		from press.utils import get_mariadb_root_password
 
