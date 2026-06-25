@@ -1965,6 +1965,18 @@ def activate(name):
 
 @frappe.whitelist()
 @protected("Site")
+def suspend(name, reason=None, skip_reload=False):
+	frappe.get_doc("Site", name).suspend(reason=reason, skip_reload=skip_reload)
+
+
+@frappe.whitelist()
+@protected("Site")
+def unsuspend(name, reason=None):
+	frappe.get_doc("Site", name).unsuspend(reason=reason)
+
+
+@frappe.whitelist()
+@protected("Site")
 def login(name, reason=None):
 	return {"sid": frappe.get_doc("Site", name).login(reason), "site": name}
 

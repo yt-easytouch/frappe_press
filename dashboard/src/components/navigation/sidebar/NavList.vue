@@ -60,8 +60,6 @@ const navigation = computed(() => {
 			spacer: true,
 			disabled: enforce2FA,
 		},
-			disabled: enforce2FA,
-		},
 		{
 			name: 'Sites',
 			icon: PanelTopInactive,
@@ -165,7 +163,6 @@ const navigation = computed(() => {
 			condition: $team.doc?.is_desk_user || $session.hasBillingAccess,
 			disabled: enforce2FA,
 		},
-		{
 		{
 			name: 'Access Requests',
 			icon: Key,

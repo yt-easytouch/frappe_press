@@ -11,15 +11,15 @@ frappe.ui.form.on('Invoice', {
 		}
 		if (frm.doc.frappe_invoice) {
 			frm.add_web_link(
-				`https://frappe.io/app/sales-invoice/${frm.doc.frappe_invoice}`,
+				`https://my.yool.tech/app/sales-invoice/${frm.doc.frappe_invoice}`,
 				'View Frappe Invoice',
 			);
 		}
 
 		if (frm.doc.frappe_partner_order) {
 			frm.add_web_link(
-				`https://frappe.io/app/partner-order/${frm.doc.frappe_partner_order}`,
-				'View Frappe Partner Order',
+				`https://my.yool.tech/app/partner-order/${frm.doc.frappe_partner_order}`,
+				'View Yooltech Partner Order',
 			);
 		}
 
@@ -163,7 +163,7 @@ frappe.ui.form.on('Invoice', {
 			let btn = frm.add_custom_button('Finalize Invoice', () =>
 				frappe.confirm(
 					'This action will apply credits (if applicable) and generate a Stripe invoice if the amount due is greater than 0. ' +
-						'If a Stripe invoice was generated already, it will be voided and a new one will be generated. Continue?',
+					'If a Stripe invoice was generated already, it will be voided and a new one will be generated. Continue?',
 					() =>
 						frm
 							.call({

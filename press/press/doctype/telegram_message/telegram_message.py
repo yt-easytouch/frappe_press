@@ -7,7 +7,11 @@ import frappe
 from frappe.model.document import Document
 from frappe.query_builder import Interval
 from frappe.query_builder.functions import Now
-from telegram.error import NetworkError, RetryAfter
+try:
+	from telegram.error import NetworkError, RetryAfter  # type: ignore
+except Exception:  # pragma: no cover
+	NetworkError = Exception
+	RetryAfter = Exception
 
 from press.telegram_utils import Telegram
 

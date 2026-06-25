@@ -21,3 +21,4 @@
     <circle  fill="#fff"  cx="143.96" cy="94.27" r="24.86"/>
   </g>
 </svg>
+</template>

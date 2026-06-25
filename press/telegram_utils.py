@@ -3,7 +3,10 @@
 
 
 import frappe
-import telegram
+try:
+	import telegram  # type: ignore
+except Exception:  # pragma: no cover
+	telegram = None
 
 from press.utils import log_error
 
@@ -29,6 +32,13 @@ class Telegram:
 	def send(self, message, html=False, reraise=False):
 		if not message:
 			return None
+		if telegram is None:
+			if reraise:
+				raise RuntimeError(
+					"Telegram integration is unavailable (python 'telegram' dependency failed to import)."
+				)
+			log_error("Telegram Bot Error", message=message, html=html, chat_id=self.chat_id, topic_id=self.topic_id)
+			return None
 		try:
 			text = message[: telegram.MAX_MESSAGE_LENGTH]
 			parse_mode = self._get_parse_mode(html)
@@ -51,12 +61,18 @@ class Telegram:
 			)
 
 	def _get_parse_mode(self, html):
+		if telegram is None:
+			return None
 		if html:
 			return telegram.ParseMode.HTML
 		return telegram.ParseMode.MARKDOWN
 
 	@property
 	def bot(self):
+		if telegram is None:
+			raise RuntimeError(
+				"Telegram integration is unavailable (python 'telegram' dependency failed to import)."
+			)
 		return telegram.Bot(token=self.token)
 
 	def respond(self, message):

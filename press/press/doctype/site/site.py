@@ -5074,6 +5074,7 @@ def get_suspended_time(site: str):
 
 
 def archive_suspended_site(site_dict: SiteToArchive):
+	raise Exception("Archive Stopped Temporarily")
 	archive_after_days = ARCHIVE_AFTER_SUSPEND_DAYS
 	suspended_days = frappe.utils.date_diff(frappe.utils.today(), get_suspended_time(site_dict.name))
 
@@ -5319,6 +5320,7 @@ def get_updates_between_current_and_next_apps(
 
 
 def archive_creation_failed_sites():
+	raise Exception("Archive Stopped Temporarily")
 	creation_failure_retention_date = frappe.utils.add_days(
 		frappe.utils.now(), -CREATION_FAILURE_RETENTION_DAYS
 	)

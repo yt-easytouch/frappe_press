@@ -191,10 +191,10 @@
 					By clicking "I Agree", you confirm that you have read and accepted the
 					terms and conditions of the
 					<a
-						href="https://frappe.io/partners/terms"
+						href="https://my.yool.tech/partners/terms"
 						target="_blank"
 						class="underline"
-						><strong>Frappe Partnership Agreement</strong></a
+						><strong>Yooltech Partnership Agreement</strong></a
 					>.
 				</p>
 			</template>

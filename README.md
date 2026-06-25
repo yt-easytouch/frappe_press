@@ -1,6 +1,6 @@
 <div align="center" markdown="1">
 
-<img src="https://frappe.io/files/cloud9c3ae6.png" alt="Press logo" width="80"/>
+<img src="https://my.yool.tech/files/cloud9c3ae6.png" alt="Press logo" width="80"/>
 <h1>Press</h1>
 
 **Full Service Cloud Hosting For The Frappe Stack - Powers Frappe Cloud**
@@ -15,7 +15,7 @@
 </div>
 <br />
 <div align="center">
-	<a href="https://frappe.io/press">Website</a>
+	<a href="https://my.yool.tech/press">Website</a>
 	-
 	<a href="https://docs.frappe.io/cloud/">Documentation</a>
 </div>
@@ -88,8 +88,8 @@ There's a [pre-commit](https://pre-commit.com/) hook included in the repo. You c
 <div align="center" style="padding-top: 0.75rem;">
 	<a href="https://frappe.io" target="_blank">
 		<picture>
-			<source media="(prefers-color-scheme: dark)" srcset="https://frappe.io/files/Frappe-white.png">
-			<img src="https://frappe.io/files/Frappe-black.png" alt="Frappe Technologies" height="28"/>
+			<source media="(prefers-color-scheme: dark)" srcset="https://my.yool.tech/files/Frappe-white.png">
+			<img src="https://my.yool.tech/files/Frappe-black.png" alt="Frappe Technologies" height="28"/>
 		</picture>
 	</a>
 </div>
