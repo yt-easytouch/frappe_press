@@ -24,6 +24,8 @@ from press.utils.billing import (
 	get_razorpay_client,
 	is_frappe_auth_disabled,
 )
+from press.utils.jobs import has_job_timeout_exceeded
+from press.utils.telemetry import capture_pulse
 
 if typing.TYPE_CHECKING:
 	from press.press.doctype.usage_record.usage_record import UsageRecord
@@ -232,6 +234,33 @@ class Invoice(Document):
 			url = self.stripe_invoice_url
 		return url
 
+	def before_validate(self):
+		self.apply_partner_discounts()
+
+	def apply_partner_discounts(self):
+		partner_discounts = {"Entry": 10, "Emerging": 10, "Bronze": 15, "Silver": 20, "Gold": 25}
+		team = frappe.get_doc("Team", self.team)
+		if team.erpnext_partner and team.partner_status == "Active" and team.partner_email:
+			result = team.get_partner_level()
+			if result:
+				partner_level = result[0]
+				certificates = result[1]
+			else:
+				partner_level = "Entry"
+				certificates = 0
+
+			discount_percent = partner_discounts.get(partner_level, 0)
+			if certificates is None:
+				certificates = 0
+			if partner_level == "Entry" and certificates < 2:
+				discount_percent = 0
+
+			for item in self.items:
+				if item.document_type in ("Site", "Server", "Database Server", "Cluster"):
+					item.discount_percentage = discount_percent
+
+			self.discount_note = "New Partner Discount"
+
 	def validate(self):
 		self.validate_team()
 		self.validate_dates()
@@ -242,7 +271,9 @@ class Invoice(Document):
 
 	def before_submit(self):
 		if self.total > 0 and self.status != "Paid":
-			frappe.throw("Invoice must be Paid to be submitted")
+			frappe.throw(
+				"An invoice with a balance due can only be submitted once it is Paid. Please collect or record the payment first."
+			)
 
 	def calculate_values(self):
 		if self.status == "Paid" and self.docstatus == 1:
@@ -309,7 +340,9 @@ class Invoice(Document):
 				# or issue a refund if succeeded
 				self.save()  # status is already Paid, so no need to set again
 			else:
-				self.change_stripe_invoice_status("Void")
+				# check if invoice is already void earlier
+				if invoice.status != "void":
+					self.change_stripe_invoice_status("Void")
 				self.add_comment(
 					text=(
 						f"Stripe Invoice {self.stripe_invoice_id} voided because payment is done via credits."
@@ -383,10 +416,71 @@ class Invoice(Document):
 	def on_submit(self):
 		self.create_invoice_on_frappeio()
 		self.fetch_mpesa_invoice_pdf()
+		self.update_team_tier()
+		self.publish_partner_onboarding_mrr_update()
 
 	def on_update_after_submit(self):
 		self.create_invoice_on_frappeio()
 		self.fetch_mpesa_invoice_pdf()
+		self.publish_partner_onboarding_mrr_update()
+
+	def publish_partner_onboarding_mrr_update(self):
+		if self.type != "Subscription" or not self.partner_email:
+			return
+
+		for team in frappe.get_all("Team", {"partner_email": self.partner_email}, pluck="name"):
+			frappe.publish_realtime(
+				"partner_onboarding_mrr_updated",
+				message={"team": team},
+				doctype="Team",
+				after_commit=True,
+			)
+
+	def update_team_tier(self):
+		if self.type != "Subscription":
+			return
+
+		team = frappe.get_doc("Team", self.team)
+
+		if not team.apply_limits:
+			return
+
+		# Check if the last 3 subscription invoices (including current) are all paid
+		last_invoices = frappe.get_all(
+			"Invoice",
+			filters={
+				"team": self.team,
+				"type": "Subscription",
+				"docstatus": 1,
+				"status": "Paid",
+			},
+			fields=["name"],
+			order_by="creation desc",
+			limit=3,
+		)
+
+		if len(last_invoices) < 3:
+			return
+
+		current_total = flt(self.total)
+		if self.currency == "INR":
+			current_total = flt(self.total / 82, 2)
+
+		tiers = frappe.get_all(
+			"Team Tier",
+			fields=["name", "tier", "last_invoice_amount"],
+			order_by="last_invoice_amount desc",
+		)
+
+		new_tier = None
+		for tier in tiers:
+			if flt(tier.last_invoice_amount) <= current_total:
+				new_tier = tier.name
+				break
+
+		if new_tier and team.tier != new_tier:
+			team.tier = new_tier
+			team.save(ignore_permissions=True)
 
 	def after_insert(self):
 		if self.get("amended_from"):
@@ -473,6 +567,10 @@ class Invoice(Document):
 				commit=True,
 			)
 			self.reload()
+			capture_pulse(
+				"stripe_invoice_created",
+				{"team": self.team, "invoice": self.name, "amount": amount, "currency": self.currency},
+			)
 			return invoice
 		except Exception:
 			frappe.db.rollback()
@@ -696,7 +794,7 @@ class Invoice(Document):
 		else:
 			self.billing_email = self.customer_email
 		self.currency = team.currency
-		if not self.payment_mode:
+		if not self.payment_mode or self.status == "Draft":
 			self.payment_mode = team.payment_mode
 		if not self.currency:
 			frappe.throw(f"Cannot create Invoice because Currency is not set in Team {self.team}")
@@ -899,6 +997,7 @@ class Invoice(Document):
 			)
 			doc.insert()
 			doc.submit()
+		self.publish_partner_onboarding_mrr_update()
 
 	def apply_credit_balance(self):
 		# previously we used to cancel and re-apply credits, but it messed up the balance transaction history
@@ -944,7 +1043,7 @@ class Invoice(Document):
 				{"invoice": self.name, "amount": allocated, "currency": self.currency},
 			)
 			# ignore permissions for BT added via Mpesa
-			doc.save(ignore_permissions=True)
+			doc.save()
 			total_allocated += allocated
 
 		balance_transaction = frappe.get_doc(
@@ -953,7 +1052,7 @@ class Invoice(Document):
 			type="Applied To Invoice",
 			amount=total_allocated * -1,
 			invoice=self.name,
-		).insert(ignore_permissions=True)
+		).insert()
 		balance_transaction.submit()
 
 		self.applied_credits = sum(row.amount for row in self.credit_allocations)
@@ -1314,9 +1413,11 @@ def finalize_razorpay_mandate_invoices():
 		},
 		fields=["name", "razorpay_payment_id"],
 	)
+	client = get_razorpay_client()
 	for inv in invoices:
+		if has_job_timeout_exceeded():
+			return
 		try:
-			client = get_razorpay_client()
 			payment = client.payment.fetch(inv.razorpay_payment_id)
 			payment_status = payment.get("status")
 
@@ -1377,6 +1478,50 @@ def finalize_draft_invoice(invoice):
 
 def calculate_gst(amount):
 	return amount * 0.18
+
+
+def sync_paid_invoices_to_frappeio():
+	"""Syncs paid invoices to frappe.io for teams that have not yet had an invoice created on frappe.io"""
+	invs = frappe.get_all(
+		"Invoice",
+		filters={"status": "Paid", "transaction_amount": (">", 0.0), "frappe_invoice": ("is", "not set")},
+		fields=["name", "team"],
+	)
+
+	for inv in invs:
+		if frappe.db.get_value("Team", inv.team, "enabled") == 1:
+			frappe.get_doc("Invoice", inv.name).create_invoice_on_frappeio()
+
+
+def finalize_unpaid_card_invoices():
+	today = frappe.utils.now()
+	Team = frappe.qb.DocType("Team")
+	Invoice = frappe.qb.DocType("Invoice")
+	invs = (
+		frappe.qb.from_(Invoice)
+		.inner_join(Team)
+		.on(Invoice.team == Team.name)
+		.select(Invoice.name)
+		.where(
+			(Invoice.status == "Unpaid")
+			& (Invoice.type == "Subscription")
+			& (Invoice.period_end < today)
+			& (Invoice.payment_mode == "Card")
+			& (Invoice.stripe_invoice_id.isnull())
+			& (Invoice.amount_due > 0)
+			& (Team.enabled == 1)
+		)
+		.run(as_dict=True)
+	)
+
+	for inv in invs:
+		invoice = frappe.get_doc("Invoice", inv.name)
+		try:
+			invoice.finalize_invoice()
+			frappe.db.commit()
+		except Exception:
+			frappe.db.rollback()
+			frappe.log_error(f"Failed to finalize unpaid card invoice: {invoice.name}")
 
 
 def get_permission_query_conditions(user):

@@ -44,6 +44,7 @@
         "billing_address",
         "free_credits_allocated",
         "upi_autopay_enabled",
+        "is_trusted_team",
         "column_break_12",
         "address_html",
         "section_break_jzok",
@@ -89,6 +90,9 @@
         "skip_backups",
         "enable_inplace_updates",
         "relaxed_permissions",
+        "apply_limits",
+        "spending_limit",
+        "tier",
         "column_break_31",
         "database_access_enabled",
         "enable_performance_tuning",
@@ -698,6 +702,35 @@
             "fieldname": "upi_autopay_enabled",
             "fieldtype": "Check",
             "label": "UPI Autopay Enabled"
+        },
+        {
+            "default": "0",
+            "fieldname": "is_trusted_team",
+            "fieldtype": "Check",
+            "label": "Is Trusted Team"
+        },
+        {
+            "default": "0",
+            "fieldname": "apply_limits",
+            "fieldtype": "Check",
+            "label": "Apply Limits"
+        },
+        {
+            "depends_on": "eval: doc.apply_limits == 1",
+            "description": "(in USD)",
+            "fieldname": "spending_limit",
+            "fieldtype": "Currency",
+            "label": "Spending Limit",
+            "options": "USD",
+            "read_only": 1
+        },
+        {
+            "depends_on": "eval: doc.apply_limits == 1",
+            "fieldname": "tier",
+            "fieldtype": "Link",
+            "label": "Tier",
+            "mandatory_depends_on": "eval: doc.apply_limits == 1",
+            "options": "Team Tier"
         }
     ],
     "grid_page_length": 50,

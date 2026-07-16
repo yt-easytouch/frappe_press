@@ -10,11 +10,27 @@ import PatchAppDialog from '../components/group/PatchAppDialog.vue';
 import { getTeam, switchToTeam } from '../data/team';
 import router from '../router';
 import { confirmDialog, icon, renderDialog } from '../utils/components';
-import { date, duration } from '../utils/format';
 import { getToastErrorMessage } from '../utils/toast';
 import { getJobsTab } from './common/jobs';
 import { getPatchesTab } from './common/patches';
 import { tagTab } from './common/tags';
+
+import { pollReleasePipelineValidationStatus } from '@/utils/pollReleasePipeline';
+
+const removeApps = async (releaseGroup, rows) => {
+	let removed = 0;
+	for (const row of rows) {
+		try {
+			await releaseGroup.removeApp.submit({ app: row.name });
+			removed++;
+		} catch (e) {
+			const detail = e.messages?.length ? e.messages.join(' ') : e.message;
+			throw new Error(
+				`Removed ${removed} of ${rows.length} apps. Failed to remove "${row.title}": ${detail}`,
+			);
+		}
+	}
+}
 
 export default {
 	doctype: 'Release Group',
@@ -42,87 +58,7 @@ export default {
 	list: {
 		route: '/groups',
 		title: 'Benches',
-		fields: [{ apps: ['app'] }],
-		searchField: 'title',
-		filterControls() {
-			return [
-				{
-					type: 'link',
-					label: 'Version',
-					fieldname: 'version',
-					options: {
-						doctype: 'Frappe Version',
-					},
-				},
-				{
-					type: 'link',
-					label: 'Tag',
-					fieldname: 'tags.tag',
-					options: {
-						doctype: 'Press Tag',
-						filters: {
-							doctype_name: 'Release Group',
-						},
-					},
-				},
-			];
-		},
-		columns: [
-			{ label: 'Title', fieldname: 'title', class: 'font-medium' },
-			{
-				label: 'Status',
-				fieldname: 'active_benches',
-				type: 'Badge',
-				width: 0.5,
-				format: (value, row) => {
-					if (!value) return 'Awaiting Deploy';
-					else return 'Active';
-				},
-			},
-			{
-				label: 'Version',
-				fieldname: 'version',
-				width: 0.5,
-			},
-			{
-				label: 'Apps',
-				fieldname: 'app',
-				format: (value, row) => {
-					return (row.apps || []).map((d) => d.app).join(', ');
-				},
-				width: '25rem',
-			},
-			{
-				label: 'Sites',
-				fieldname: 'site_count',
-				class: 'text-gray-600',
-				width: 0.25,
-			},
-		],
-		primaryAction() {
-			return {
-				label: 'New Bench',
-				variant: 'solid',
-				slots: {
-					prefix: icon('plus'),
-				},
-				onClick() {
-					router.push({ name: 'New Release Group' });
-				},
-			};
-		},
-		banner({ listResource: groups }) {
-			if (!groups.data?.length) {
-				return {
-					title: 'Learn how to create a new private bench and sites',
-					button: {
-						label: 'Read docs',
-						variant: 'outline',
-						link: 'https://docs.frappe.io/cloud/benches/create-new',
-					},
-				};
-			}
-		},
+		component: () => import('../pages/benches/list/Page.vue'),
 	},
 	detail: {
 		titleField: 'title',
@@ -227,7 +163,7 @@ export default {
 									{
 										text: "What's this?",
 										placement: 'top',
-										class: 'rounded-full bg-gray-100 p-1',
+										class: 'rounded-full bg-surface-gray-2 p-1',
 									},
 									() => [
 										h(
@@ -256,6 +192,7 @@ export default {
 							width: 0.5,
 						},
 					],
+					rowDisabled: (row) => row.name === 'frappe',
 					rowActions({
 						row,
 						listResource: apps,
@@ -354,10 +291,62 @@ export default {
 							},
 						];
 					},
+					moreActions({ selectionMode, enterSelectionMode }) {
+						if (selectionMode) return [];
+						return [
+							{
+								label: 'Uninstall Multiple',
+								icon: 'trash-2',
+								onClick: () => enterSelectionMode(),
+							},
+						];
+					},
+					secondaryAction({ selectionMode, exitSelectionMode }) {
+						if (!selectionMode) return null;
+						return {
+							label: 'Cancel',
+							onClick: () => exitSelectionMode(),
+						};
+					},
 					primaryAction({
 						listResource: apps,
 						documentResource: releaseGroup,
+						selectionMode,
+						selectedRows,
+						exitSelectionMode,
 					}) {
+						if (selectionMode) {
+							return {
+								label: selectedRows.length
+									? `Remove ${selectedRows.length} App${selectedRows.length === 1 ? '' : 's'}`
+									: 'Remove Apps',
+								theme: 'red',
+								disabled: selectedRows.length === 0,
+								onClick() {
+									confirmDialog({
+										title: 'Remove Apps',
+										message: `Are you sure you want to remove <b>${selectedRows.length}</b> app${selectedRows.length === 1 ? '' : 's'}: ${selectedRows.map((row) => row.title).join(', ')}?`,
+										onSuccess: ({ hide }) => {
+											toast.promise(removeApps(releaseGroup, selectedRows), {
+												loading: 'Removing Apps...',
+												success: () => {
+													hide();
+													exitSelectionMode();
+													apps.reload();
+													return 'Apps Removed';
+												},
+												error: (e) => {
+													hide();
+													exitSelectionMode();
+													apps.reload();
+													return getToastErrorMessage(e);
+												},
+											});
+										},
+									});
+								},
+							};
+						}
 						return {
 							label: 'Add App',
 							slots: {
@@ -404,153 +393,22 @@ export default {
 					},
 				},
 			},
+
+      
 			{
 				label: 'Deploys',
 				route: 'deploys',
 				icon: icon('package'),
-				childrenRoutes: ['Deploy Candidate'],
-				type: 'list',
-				list: {
-					doctype: 'Deploy Candidate Build',
-					route: (row) => ({
-						name: 'Deploy Candidate',
-						params: { id: row.name },
-					}),
-					filters: (releaseGroup) => {
-						return {
-							group: releaseGroup.name,
-						};
-					},
-					orderBy: 'creation desc',
-					// fields: [{ apps: ['app'] }],
-					filterControls() {
-						return [
-							{
-								type: 'select',
-								label: 'Status',
-								fieldname: 'status',
-								options: [
-									'',
-									'Draft',
-									'Scheduled',
-									'Pending',
-									'Preparing',
-									'Running',
-									'Success',
-									'Failure',
-								],
-							},
-						];
-					},
-					banner({ documentResource: releaseGroup }) {
-						if (releaseGroup.doc.are_builds_suspended) {
-							return {
-								title:
-									'<b>Builds Suspended:</b> updates will be scheduled to run when builds resume.',
-								type: 'warning',
-							};
-						} else {
-							return null;
-						}
-					},
-					columns: [
-						{
-							label: 'Deploy',
-							fieldname: 'creation',
-							format(value) {
-								return `Deploy on ${date(value, 'llll')}`;
-							},
-							width: '20rem',
-						},
-						{
-							label: 'Status',
-							fieldname: 'status',
-							type: 'Badge',
-							width: 0.5,
-							suffix(row) {
-								if (!row.addressable_notification) {
-									return;
-								}
-
-								return h(
-									Tooltip,
-									{
-										text: 'Attention required!',
-										placement: 'top',
-										class: 'rounded-full bg-gray-100 p-1',
-									},
-									() => h(icon('alert-circle', 'w-3 h-3'), {}),
-								);
-							},
-						},
-						{
-							label: 'Duration',
-							fieldname: 'build_duration',
-							format: duration,
-							class: 'text-gray-600',
-							width: 1,
-						},
-						{
-							label: 'Deployed By',
-							fieldname: 'owner',
-							width: 1,
-						},
-					],
-					primaryAction({ listResource: deploys, documentResource: group }) {
-						return {
-							label: 'Deploy',
-							slots: {
-								prefix: icon(LucideRocket),
-							},
-							onClick() {
-								if (group.doc.deploy_information.deploy_in_progress) {
-									return toast.error(
-										'Deploy is in progress. Please wait for it to complete.',
-									);
-								} else if (group.doc.deploy_information.update_available) {
-									let UpdateReleaseGroupDialog = defineAsyncComponent(
-										() =>
-											import(
-												'../components/group/UpdateReleaseGroupDialog.vue'
-											),
-									);
-									renderDialog(
-										h(UpdateReleaseGroupDialog, {
-											bench: group.name,
-											lastDeploy: true,
-											onSuccess(candidate) {
-												group.doc.deploy_information.has_running_release_pipeline = true;
-												group.doc.deploy_information.update_available = false;
-												if (candidate) {
-													group.doc.deploy_information.last_deploy.name =
-														candidate;
-												}
-											},
-										}),
-									);
-								} else {
-									confirmDialog({
-										title: 'Deploy without app updates?',
-										message:
-											'No app updates detected. Changes in dependencies and environment variables will be applied on deploying.',
-										onSuccess: ({ hide }) => {
-											toast.promise(group.redeploy.submit(), {
-												loading: 'Deploying...',
-												success: () => {
-													hide();
-													deploys.reload();
-													return 'Changes Deployed';
-												},
-												error: (e) => getToastErrorMessage(e),
-											});
-										},
-									});
-								}
-							},
-						};
-					},
-				},
+				type: 'Component',
+				component: defineAsyncComponent(
+					() => import('../pages/benches/Deploys.vue'),
+				),
+				childrenRoutes: ['Deploy Candidate', 'Release Pipeline'],
+        	props: (releaseGroup) => ({
+					name: releaseGroup.doc.name,
+				}),
 			},
+
 			getJobsTab('Release Group'),
 			{
 				label: 'Config',
@@ -888,6 +746,10 @@ export default {
 			let { documentResource: group } = context;
 			let team = getTeam();
 
+			if (group.doc?.deploy_information?.has_running_release_pipeline) {
+				pollReleasePipelineValidationStatus(group);
+			}
+
 			return [
 				{
 					label: 'Impersonate Group Owner',
@@ -926,40 +788,18 @@ export default {
 								bench: group.name,
 								lastDeploy: group.doc?.deploy_information?.last_deploy,
 								onSuccess(candidate) {
-									// group.doc.deploy_information.has_running_release_pipeline = true;
-									group.doc.deploy_information.deploy_in_progress = true;
+									group.doc.deploy_information.has_running_release_pipeline = true;
 									group.doc.deploy_information.update_available = false;
+
 									if (candidate) {
 										group.doc.deploy_information.last_deploy = {
 											name: candidate,
 										};
 									}
+									pollReleasePipelineValidationStatus(group);
 								},
 							}),
 						);
-					},
-				},
-				{
-					label: 'Validating Deploy',
-					slots: {
-						prefix: () => h(LoadingIndicator, { class: 'w-4 h-4' }),
-					},
-					theme: 'green',
-					condition: () =>
-						!group.doc.deploy_information.deploy_in_progress &&
-						!group.doc.deploy_information.bench_creation_underway &&
-						group.doc.deploy_information.has_running_release_pipeline,
-				},
-				{
-					label: 'Deploy in progress',
-					slots: {
-						prefix: () => h(LoadingIndicator, { class: 'w-4 h-4' }),
-					},
-					theme: 'green',
-					condition: () => group.doc.deploy_information.deploy_in_progress,
-					route: {
-						name: 'Deploy Candidate',
-						params: { id: group.doc?.deploy_information?.last_deploy?.name },
 					},
 				},
 				{
@@ -986,7 +826,13 @@ export default {
 		{
 			name: 'Deploy Candidate',
 			path: 'deploys/:id',
-			component: () => import('../pages/DeployCandidate.vue'),
+			component: () => import('../components/benches/pipeline/Details.vue'),
+      props: { deployview: true }
+		},
+   	{
+			name: 'Release Pipeline',
+			path: 'pipeline/:id',
+			component: () => import('../components/benches/pipeline/Details.vue'),
 		},
 		{
 			name: 'Release Group Job',

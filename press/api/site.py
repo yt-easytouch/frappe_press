@@ -15,7 +15,8 @@ from frappe.desk.doctype.tag.tag import add_tag
 from frappe.query_builder import Case
 from frappe.query_builder.terms import ValueWrapper
 from frappe.rate_limiter import rate_limit
-from frappe.utils import flt, sbool, time_diff_in_hours
+from frappe.utils import cint, flt, sbool, time_diff_in_hours
+from frappe.utils.data import format_datetime, get_datetime
 from frappe.utils.password import get_decrypted_password
 from frappe.utils.typing_validations import validate_argument_types
 from frappe.utils.user import is_system_user
@@ -23,13 +24,24 @@ from frappe.utils.user import is_system_user
 from press.access.support_access import has_support_access
 from press.guards import role_guard
 from press.press.doctype.agent_job.agent_job import job_detail
+from press.press.doctype.app.app import get_app_from_policies
 from press.press.doctype.marketplace_app.marketplace_app import (
 	get_plans_for_app,
 	get_total_installs_by_app,
 )
 from press.press.doctype.remote_file.remote_file import get_remote_key
+from press.press.doctype.root_domain.root_domain import get_matching_domain
 from press.press.doctype.server.server import is_dedicated_server
-from press.press.doctype.site.site import Site, get_updates_between_current_and_next_apps
+from press.press.doctype.site.site import (
+	Site,
+	get_updates_between_current_and_next_apps,
+)
+from press.press.doctype.site.site_plan_utils import (
+	attach_warranty_info_to_dedicated_servers,
+	get_available_warranty_quota_for_server,
+	get_next_allowed_dedicated_product_warranty_change_date,
+	is_product_warranty_enabled_for_plan_,
+)
 from press.press.doctype.site_plan.plan import Plan
 from press.press.doctype.site_update.site_update import benches_with_available_update
 from press.utils import (
@@ -172,20 +184,21 @@ def _new(site, server: str | None = None, ignore_plan_validation: bool = False):
 		.where(Bench.status == "Active")
 		.where(Bench.group == site["group"])
 		.orderby(Case().when(Bench.cluster == cluster, 1).else_(0), order=frappe.qb.desc)
-		.orderby(Server.use_for_new_sites, order=frappe.qb.desc)
 		.orderby(Bench.creation, order=frappe.qb.desc)
 		.limit(1)
 	)
 
 	if server:
 		bench_query = bench_query.where(Server.name == server)
+	else:
+		bench_query.orderby(Server.use_for_new_sites, order=frappe.qb.desc)
 
 	bench = bench_query.run(as_dict=True).pop()
 
 	plan = site["plan"]
 	app_plans = site.get("selected_app_plans")
 	if not ignore_plan_validation:
-		validate_plan(bench.server, plan)
+		validate_plan(bench.server, site.get("name"), plan, is_new=True)
 
 	site = frappe.get_doc(
 		{
@@ -242,7 +255,9 @@ def get_group_for_new_site_and_set_localisation_app(site, apps):
 
 	# if localisation country is selected, move site to a public bench with the same localisation app
 	localisation_app = frappe.db.get_value(
-		"Marketplace Localisation App", {"country": localisation_country}, "marketplace_app"
+		"Marketplace Localisation App",
+		{"country": localisation_country},
+		"marketplace_app",
 	)
 	restricted_release_group_names = frappe.db.get_all(
 		"Site Plan Release Group",
@@ -272,13 +287,86 @@ def get_group_for_new_site_and_set_localisation_app(site, apps):
 	return groups[0]
 
 
+def _check_warranty_restrictions(
+	site: str,
+	server: str,
+	new_plan: str,
+	is_new: bool,
+	is_system_user: bool,
+	is_current_dedicated_server_plan: bool,
+	is_current_plan_supported: bool,
+) -> None:
+	if is_new or is_system_user or not is_current_dedicated_server_plan:
+		return
+	is_new_plan_supported = is_product_warranty_enabled_for_plan_(new_plan)
+	if is_current_plan_supported == is_new_plan_supported:
+		return
+	if is_new_plan_supported:
+		# Enabling warranty is gated only by the server quota (it consumes a slot).
+		# The cooldown deliberately does not apply: the only enable the cooldown
+		# would block is a site reclaiming the slot it itself just gave up, which
+		# is legitimate as long as a slot is free. Rotating support to a *different*
+		# site is already prevented by the quota plus the cooldown on disabling.
+		quota = get_available_warranty_quota_for_server(server)
+		if quota.get("available") <= 0:
+			frappe.throw(
+				"You have exhausted the site warranty quota for this server. To increase limit, please contact support."
+			)
+		return
+	# Disabling warranty is gated by the cooldown to deter freeing a slot only to
+	# rotate it onto another site.
+	next_warranty_change = get_next_allowed_dedicated_product_warranty_change_date(site)
+	if get_datetime() < next_warranty_change:
+		pretty_date = format_datetime(next_warranty_change, "MMM d, YYYY hh:mm a")
+		frappe.throw(f"Cannot change product warranty for this site before {pretty_date}")  # nosemgrep
+
+
+def _is_plan_allowed_on_server(server: str, new_site_plan: dict) -> bool:
+	if new_site_plan.get("price_usd", 0) > 0:
+		return True
+	if not (
+		new_site_plan.get("dedicated_server_plan", 0)
+		and frappe.db.get_value("Server", server, "team") == get_current_team()
+	):
+		return False
+	if not new_site_plan.get("restrict_based_on_dedicated_server_plan", 0):
+		return True
+	min_price = new_site_plan.get("minimum_server_price_usd", 0)
+	return get_dedicated_server_price(server) >= min_price
+
+
+def get_dedicated_server_price(server: str) -> float:
+	"""Combined monthly USD cost of a dedicated server: app server plan + its database server plan."""
+	app_server_plan, database_server = frappe.db.get_value("Server", server, ["plan", "database_server"])
+	app_server_price = frappe.db.get_value("Server Plan", app_server_plan, "price_usd") or 0
+
+	database_server_price = 0
+	if database_server:
+		database_server_plan = frappe.db.get_value("Database Server", database_server, "plan")
+		database_server_price = frappe.db.get_value("Server Plan", database_server_plan, "price_usd") or 0
+
+	return app_server_price + database_server_price
+
+
 @validate_argument_types
-def validate_plan(server: str, plan: str) -> None:
-	if not frappe.db.exists("Site Plan", plan):
-		frappe.throw(f"Plan {plan} does not exist", frappe.DoesNotExistError)  # nosemgrep
-	site_plan = frappe.db.get_value(
+def validate_plan(server: str, site: str, new_plan: str, is_new: bool = False) -> None:
+	if not frappe.db.exists("Site Plan", new_plan):
+		frappe.throw(f"Plan {new_plan} does not exist", frappe.DoesNotExistError)  # nosemgrep
+
+	plan_name = frappe.get_value("Site", site, "plan")
+	if not plan_name:
+		is_current_plan_supported = False
+		is_current_dedicated_server_plan = False
+	else:
+		is_current_plan_supported, is_current_dedicated_server_plan = frappe.db.get_value(
+			"Site Plan",
+			plan_name,
+			["support_included", "dedicated_server_plan"],
+		) or (False, False)
+
+	new_site_plan = frappe.db.get_value(
 		"Site Plan",
-		plan,
+		new_plan,
 		[
 			"price_usd",
 			"dedicated_server_plan",
@@ -288,25 +376,19 @@ def validate_plan(server: str, plan: str) -> None:
 		as_dict=True,
 	)
 
-	if (
-		site_plan.get("price_usd", 0) > 0
-		or site_plan.get("dedicated_server_plan", 0) == 1
-	):
-		return
+	is_system_user = frappe.session.data.user_type == "System User"
 
-	if (
-		site_plan.get("dedicated_server_plan", 0)
-		and frappe.db.get_value("Server", server, "team") == get_current_team()
-	):
-		if not site_plan.get("restrict_based_on_dedicated_server_plan", 0):
-			return
-		app_server_plan = frappe.db.get_value("Server", server, "plan")
-		min_app_server_price_usd = site_plan.get("minimum_server_price_usd", 0)
-		app_server_price_usd = frappe.db.get_value("Server Plan", app_server_plan, "price_usd")
-		if app_server_price_usd >= min_app_server_price_usd:
-			return
+	_check_warranty_restrictions(
+		site,
+		server,
+		new_plan,
+		is_new,
+		is_system_user,
+		is_current_dedicated_server_plan,
+		is_current_plan_supported,
+	)
 
-	if frappe.session.data.user_type == "System User":
+	if _is_plan_allowed_on_server(server, new_site_plan) or is_system_user:
 		return
 
 	frappe.throw("You are not allowed to use this plan")  # nosemgrep
@@ -334,7 +416,9 @@ def new(site):
 	if selected_dedicated_server:
 		if localisation_country := site.get("localisation_country"):
 			localisation_app = frappe.db.get_value(
-				"Marketplace Localisation App", {"country": localisation_country}, "marketplace_app"
+				"Marketplace Localisation App",
+				{"country": localisation_country},
+				"marketplace_app",
 			)
 			if localisation_app and localisation_app not in apps:
 				apps.append(localisation_app)
@@ -466,7 +550,9 @@ def create_site_on_private_bench(
 
 	if localisation_country:
 		localisation_app = frappe.db.get_value(
-			"Marketplace Localisation App", {"country": localisation_country}, "marketplace_app"
+			"Marketplace Localisation App",
+			{"country": localisation_country},
+			"marketplace_app",
 		)
 		if localisation_app:
 			apps.append(localisation_app)
@@ -583,22 +669,31 @@ def jobs(filters=None, order_by=None, limit_start=None, limit_page_length=None):
 	return jobs
 
 
+def _get_job_team(job_doc) -> str | None:
+	if job_doc.site:
+		return frappe.db.get_value("Site", job_doc.site, "team")
+	if job_doc.bench:
+		return frappe.db.get_value("Bench", job_doc.bench, "team")
+	if job_doc.server:
+		server_type = frappe.db.get_value("Agent Job", job_doc.name, "server_type")
+		if server_type == "Server":
+			return frappe.db.get_value("Server", job_doc.server, "team")
+		if server_type == "Database Server":
+			return frappe.db.get_value("Database Server", job_doc.server, "team")
+	return None
+
+
 @frappe.whitelist()
 def job(job):
-	job = frappe.get_doc("Agent Job", job)
-	job = job.as_dict()
-	whitelisted_fields = [
-		"name",
-		"job_type",
-		"creation",
-		"status",
-		"start",
-		"end",
-		"duration",
-	]
-	for key in list(job.keys()):
-		if key not in whitelisted_fields:
-			job.pop(key, None)
+	job_doc = frappe.get_doc("Agent Job", job)
+
+	job_team = _get_job_team(job_doc)
+	current_team = get_current_team()
+	if job_team and job_team != current_team:
+		frappe.throw("Not permitted to access this job", frappe.PermissionError)
+
+	whitelisted_fields = {"name", "job_type", "creation", "status", "start", "end", "duration"}
+	job = frappe._dict({k: v for k, v in job_doc.as_dict().items() if k in whitelisted_fields})
 
 	if job.status == "Undelivered":
 		job.status = "Pending"
@@ -666,8 +761,15 @@ def backups(name):
 @frappe.whitelist()
 @protected("Site")
 def get_backup_link(name, backup, file):
+	if file not in ["database", "public", "private", "config"]:
+		frappe.throw("Invalid file type")  # nosemgrep
+
 	try:
-		remote_file = frappe.db.get_value("Site Backup", backup, f"remote_{file}_file")
+		remote_file = frappe.db.get_value(
+			"Site Backup",
+			{"name": backup, "site": name},
+			f"remote_{file}_file",
+		)
 		return frappe.get_doc("Remote File", remote_file).download_link
 	except ClientError:
 		log_error(title="Offsite Backup Response Exception")
@@ -695,7 +797,12 @@ def activities(filters=None, order_by=None, limit_start=None, limit_page_length=
 	SiteActivity = frappe.qb.DocType("Site Activity")
 	activities = (
 		frappe.qb.from_(SiteActivity)
-		.select(SiteActivity.action, SiteActivity.reason, SiteActivity.creation, SiteActivity.owner)
+		.select(
+			SiteActivity.action,
+			SiteActivity.reason,
+			SiteActivity.creation,
+			SiteActivity.owner,
+		)
 		.where(SiteActivity.site == filters["site"])
 		.where((SiteActivity.action != "Backup") | (SiteActivity.owner != "Administrator"))
 		.orderby(SiteActivity.creation, order=frappe.qb.desc)
@@ -778,7 +885,7 @@ def _get_dedicated_server_info_for_release_group(release_group_name: str) -> dic
 		- "dedicated_only_single" - exactly one dedicated server
 		- "dedicated_only_multiple" - multiple dedicated servers
 		- "user_choice_single" - one dedicated server and other public server(s)
-		"user_choice_multiple" - multiple dedicated servers and public server(s)
+		- "user_choice_multiple" - multiple dedicated servers and public server(s)
 		- "no_dedicated_server"
 	- dedicated_servers: list - Available dedicated servers for user selection
 	"""
@@ -801,6 +908,9 @@ def _get_dedicated_server_info_for_release_group(release_group_name: str) -> dic
 		filters={"name": ("in", linked_servers), "status": "Active"},
 		fields=["name", "title", "public", "team", "cluster", "provider"],
 	)
+
+	servers = attach_warranty_info_to_dedicated_servers(servers)
+
 	public_servers = [s for s in servers if s.public]
 	team_private_servers = [s for s in servers if not s.public and s.team == current_team]
 
@@ -848,8 +958,23 @@ def _get_team_dedicated_server_info(for_server: str | None = None):
 	servers = frappe.db.get_all(
 		"Server",
 		filters=filters,
-		fields=["name", "title", "cluster", "provider", "plan", "plan.price_usd as price_usd"],
+		fields=[
+			"name",
+			"title",
+			"cluster",
+			"provider",
+			"plan",
+			"public",
+		],
 	)
+
+	for server in servers:
+		# Combined app server + database server cost, matching the gate in
+		# `_is_plan_allowed_on_server` so the UI and backend agree.
+		server["price_usd"] = get_dedicated_server_price(server["name"])
+
+	if for_server:
+		servers = attach_warranty_info_to_dedicated_servers(servers)
 
 	if not servers:
 		if for_server:
@@ -869,6 +994,35 @@ def _get_team_dedicated_server_info(for_server: str | None = None):
 		"case": "user_choice_multiple",
 		"dedicated_servers": servers,
 	}
+
+
+@frappe.whitelist()
+def get_release_group_policies_for_site(version: str | None = None, for_bench: str | None = None):
+	"""Get mandatory apps from polices for a given version
+	If a bench is specified we can get the version from there otherwise we will use the version passed as argument
+	"""
+	from press.press.doctype.bench.bench import get_apps_in_bench
+
+	apps_in_bench = set()
+
+	if not version and not for_bench:
+		frappe.throw("Version or bench must be specified", frappe.ValidationError)
+
+	if not version and for_bench:
+		version = frappe.db.get_value("Release Group", for_bench, "version")
+
+	if for_bench:
+		apps_in_bench = set(get_apps_in_bench(for_bench))
+
+	assert version, "Version must be specified or derived from bench"
+
+	mandatory_apps = {
+		app["app"]
+		for app in get_app_from_policies(scope="Frappe Version", target=version, for_installation=True)
+	}
+	mandatory_apps = mandatory_apps.intersection(apps_in_bench)
+
+	return {"policies": list(mandatory_apps)}
 
 
 @frappe.whitelist()
@@ -911,7 +1065,14 @@ def options_for_new(for_bench: str | None = None, for_server: str | None = None)
 
 		marketplace_apps = frappe.db.get_all(
 			"Marketplace App",
-			fields=["title", "image", "description", "app", "route", "subscription_type"],
+			fields=[
+				"title",
+				"image",
+				"description",
+				"app",
+				"route",
+				"subscription_type",
+			],
 			filters={"app": ("in", unique_apps)},
 		)
 		total_installs_by_app = get_total_installs_by_app()
@@ -933,7 +1094,7 @@ def options_for_new(for_bench: str | None = None, for_server: str | None = None)
 	default_domain = frappe.db.get_single_value("Press Settings", "domain")
 	cluster_specific_root_domains = frappe.db.get_all(
 		"Root Domain",
-		{"name": ("like", f"%.{default_domain}")},
+		{"name": ("like", f"%.{default_domain}"), "enabled": 1},
 		["name", "default_cluster as cluster"],
 	)
 
@@ -970,7 +1131,7 @@ def options_for_new(for_bench: str | None = None, for_server: str | None = None)
 		"app_source_details": app_source_details_grouped,
 		"providers": list(unique_providers.values()),
 		"additional_clusters": private_bench_clusters,
-		"dedicated_server_config": _get_team_dedicated_server_info(for_server) if not for_bench else [],
+		"dedicated_server_config": (_get_team_dedicated_server_info(for_server) if not for_bench else []),
 	}
 
 
@@ -1775,7 +1936,10 @@ def get_installed_apps(site, query_filters: dict | None = None):
 		)
 		app_source.update(app_tags if app_tags else {})
 		app_source.subscription_available = bool(
-			frappe.db.exists("Marketplace App Plan", {"price_usd": (">", 0), "app": app.app, "enabled": 1})
+			frappe.db.exists(
+				"Marketplace App Plan",
+				{"price_usd": (">", 0), "app": app.app, "enabled": 1},
+			)
 		)
 		app_source.billing_type = is_prepaid_marketplace_app(app.app)
 		if frappe.db.exists(
@@ -2057,7 +2221,9 @@ def validate_restoration_space_requirements(
 	database_server: DatabaseServer = frappe.get_cached_doc("Database Server", server.database_server)
 
 	required_space_on_app_server = site.get_restore_space_required_on_app(
-		db_file_size=db_file_size, public_file_size=public_file_size, private_file_size=private_file_size
+		db_file_size=db_file_size,
+		public_file_size=public_file_size,
+		private_file_size=private_file_size,
 	)
 	required_space_on_db_server = site.get_restore_space_required_on_db(db_file_size=db_file_size)
 
@@ -2068,9 +2234,9 @@ def validate_restoration_space_requirements(
 
 	if server.public:
 		"""
-		If it's a public server, Frappe Cloud will auto extend the disk space
-		to accommodate the restoration.
-		"""
+        If it's a public server, Frappe Cloud will auto extend the disk space
+        to accommodate the restoration.
+        """
 		allowed_to_upload = True
 	else:
 		if (
@@ -2081,10 +2247,10 @@ def validate_restoration_space_requirements(
 
 	return {
 		"allowed_to_upload": allowed_to_upload,
-		"free_space_on_app_server": free_space_on_app_server
-		if not server.public
-		else -1,  # -1 indicates unlimited space, no need to expose public server space
-		"free_space_on_db_server": free_space_on_db_server if not database_server.public else -1,
+		"free_space_on_app_server": (
+			free_space_on_app_server if not server.public else -1
+		),  # -1 indicates unlimited space, no need to expose public server space
+		"free_space_on_db_server": (free_space_on_db_server if not database_server.public else -1),
 		"is_insufficient_space_on_app_server": free_space_on_app_server < required_space_on_app_server,
 		"is_insufficient_space_on_db_server": free_space_on_db_server < required_space_on_db_server,
 		"required_space_on_app_server": required_space_on_app_server,
@@ -2109,6 +2275,11 @@ def setup_wizard_complete(name):
 @frappe.whitelist()
 @protected("Site")
 def check_dns(name, domain):
+	domain = domain.lower().strip(".")
+	if d := get_matching_domain(domain):
+		frappe.throw(
+			f"Cannot add {d} domain as it is a system reserved domain. Please use a different domain for your site."
+		)
 	return check_dns_cname_a(name, domain)
 
 
@@ -2226,18 +2397,25 @@ def get_trial_plan():
 
 @frappe.whitelist()
 def get_upload_link(file, parts=1):
-	bucket_name = frappe.db.get_single_value("Press Settings", "remote_uploads_bucket")
-	expiration = frappe.db.get_single_value("Press Settings", "remote_link_expiry") or 3600
+	upload_bucket_details = frappe.db.get_values(
+		"Press Settings",
+		"Press Settings",
+		["remote_uploads_bucket", "region_name", "remote_access_key_id", "remote_link_expiry"],
+		as_dict=True,
+	)[0]
+
+	bucket_name = upload_bucket_details.remote_uploads_bucket
+	expiration = cint(upload_bucket_details.remote_link_expiry) or 3600
 	object_name = get_remote_key(file)
 	parts = int(parts)
 
 	s3_client = client(
 		"s3",
-		aws_access_key_id=frappe.db.get_single_value("Press Settings", "remote_access_key_id"),
+		aws_access_key_id=upload_bucket_details.remote_access_key_id,
 		aws_secret_access_key=get_decrypted_password(
 			"Press Settings", "Press Settings", "remote_secret_access_key"
 		),
-		region_name="ap-south-1",
+		region_name=upload_bucket_details.region_name or "ap-south-1",
 	)
 	try:
 		# The response contains the presigned URL and required fields
@@ -2402,7 +2580,8 @@ def confirm_site_transfer(key: str):
 		team_change = frappe.get_doc("Team Change", team_change)
 		to_team = team_change.to_team
 		if not frappe.db.get_value(
-			"Team Member", {"user": frappe.session.user, "parent": to_team, "parenttype": "Team"}
+			"Team Member",
+			{"user": frappe.session.user, "parent": to_team, "parenttype": "Team"},
 		):
 			return frappe.respond_as_web_page(
 				_("Not Permitted"),
@@ -2508,7 +2687,11 @@ def get_private_groups_for_upgrade(name, version, release_groups=None):
 @frappe.whitelist()
 @protected("Site")
 def version_upgrade(
-	name, destination_group, scheduled_datetime=None, skip_failing_patches=False, skip_backups=False
+	name,
+	destination_group,
+	scheduled_datetime=None,
+	skip_failing_patches=False,
+	skip_backups=False,
 ):
 	site = frappe.get_doc("Site", name)
 	current_version, shared_site, central_site = frappe.db.get_value(
@@ -2602,11 +2785,18 @@ def check_existing_upgrade_bench(name, version):
 	).run(as_dict=True)
 
 	if not benches:
-		return {"exists": False, "bench_name": None, "release_group": None, "release_group_title": None}
+		return {
+			"exists": False,
+			"bench_name": None,
+			"release_group": None,
+			"release_group_title": None,
+		}
 
 	bench_groups = [bench.group for bench in benches]
 	all_bench_apps = frappe.db.get_all(
-		"Release Group App", filters={"parent": ("in", bench_groups)}, fields=["parent", "app"]
+		"Release Group App",
+		filters={"parent": ("in", bench_groups)},
+		fields=["parent", "app"],
 	)
 	bench_apps_map = {}
 	for row in all_bench_apps:
@@ -2624,7 +2814,12 @@ def check_existing_upgrade_bench(name, version):
 				"release_group_title": bench.title,
 			}
 
-	return {"exists": False, "bench_name": None, "release_group": None, "release_group_title": None}
+	return {
+		"exists": False,
+		"bench_name": None,
+		"release_group": None,
+		"release_group_title": None,
+	}
 
 
 @frappe.whitelist()
@@ -2831,7 +3026,11 @@ def change_server_options(name):
 	return {
 		"servers": frappe.db.get_all(
 			"Server",
-			{"team": get_current_team(), "status": "Active", "name": ("!=", site.server)},
+			{
+				"team": get_current_team(),
+				"status": "Active",
+				"name": ("!=", site.server),
+			},
 			["name", "title"],
 		),
 		"estimated_duration": site.get_estimated_duration_for_server_change(),
@@ -3049,6 +3248,7 @@ def _get_custom_app_upgrade_source(
 		branch=branch,
 		version=next_version,
 		github_installation_id=github_installation_id,
+		ease_versioning_constrains=True,
 	)
 
 	existing_source = frappe.db.get_value(

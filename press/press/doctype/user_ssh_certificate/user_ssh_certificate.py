@@ -62,7 +62,9 @@ class UserSSHCertificate(Document):
 				"docstatus": 1,
 			},
 		):
-			frappe.throw("A valid certificate already exists.")
+			frappe.throw(
+				"You already have a valid SSH certificate for this server. Please use the existing certificate, or wait for it to expire before requesting a new one."
+			)
 
 	def before_save(self):
 		# decode the ssh key and generate a fingerprint
@@ -121,7 +123,7 @@ class UserSSHCertificate(Document):
 			proxy = "<proxy>"
 
 		ssh_port = 22
-		if self.server_type == "Proxy Server":
+		if self.server_type == "Proxy Server" or not proxy:
 			self.ssh_command = f"ssh frappe@{server} -p {ssh_port}"
 		else:
 			self.ssh_command = f"ssh -J frappe@{proxy} frappe@{server} -p {ssh_port}"
@@ -139,7 +141,8 @@ class UserSSHCertificate(Document):
 			self.proxy = frappe.db.get_value(
 				"Server", {"status": "Active", "database_server": self.access_server}, "proxy_server"
 			)
-		return f"{self.proxy},{self.access_server}"
+
+		return f"{self.proxy},{self.access_server}" if self.proxy else self.access_server
 
 
 @frappe.whitelist()

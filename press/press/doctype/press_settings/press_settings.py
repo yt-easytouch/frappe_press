@@ -30,6 +30,7 @@ class PressSettings(Document):
 		agent_github_access_token: DF.Data | None
 		agent_repository_owner: DF.Data | None
 		agent_sentry_dsn: DF.Data | None
+		allow_patch_builds: DF.Check
 		app_include_script: DF.Data | None
 		asset_store_access_key: DF.Data | None
 		asset_store_bucket_name: DF.Data | None
@@ -37,6 +38,7 @@ class PressSettings(Document):
 		asset_store_region: DF.Data | None
 		asset_store_secret_access_key: DF.Password | None
 		auto_update_queue_size: DF.Int
+		auto_upgrade_dependencies: DF.Check
 		autoscale_discount: DF.Float
 		aws_access_key_id: DF.Data | None
 		aws_s3_bucket: DF.Data | None
@@ -53,6 +55,60 @@ class PressSettings(Document):
 		central_migration_server: DF.Link | None
 		certbot_directory: DF.Data
 		challenge_alias: DF.Data | None
+		chat_base_url: DF.Data | None
+		chat_support_end_time: DF.Literal[
+			"1",
+			"2",
+			"3",
+			"4",
+			"5",
+			"6",
+			"7",
+			"8",
+			"9",
+			"10",
+			"11",
+			"12",
+			"13",
+			"14",
+			"15",
+			"16",
+			"17",
+			"18",
+			"19",
+			"20",
+			"21",
+			"22",
+			"23",
+			"24",
+		]
+		chat_support_start_time: DF.Literal[
+			"1",
+			"2",
+			"3",
+			"4",
+			"5",
+			"6",
+			"7",
+			"8",
+			"9",
+			"10",
+			"11",
+			"12",
+			"13",
+			"14",
+			"15",
+			"16",
+			"17",
+			"18",
+			"19",
+			"20",
+			"21",
+			"22",
+			"23",
+		]
+		chat_website_token: DF.Data | None
+		cleanup_standby_site_pool: DF.Check
 		clone_directory: DF.Data | None
 		cluster: DF.Link | None
 		code_server: DF.Data | None
@@ -62,6 +118,8 @@ class PressSettings(Document):
 		cool_off_period: DF.Int
 		data_40: DF.Data | None
 		default_apps: DF.Table[AppGroup]
+		default_dedicated_server_site_warranty_change_cooldown: DF.Int
+		default_dedicated_server_site_warranty_quota: DF.Int
 		default_outgoing_id: DF.Data | None
 		default_outgoing_pass: DF.Data | None
 		default_server_plan_type: DF.Link | None
@@ -84,8 +142,10 @@ class PressSettings(Document):
 		eff_registration_email: DF.Data
 		email_recipients: DF.SmallText | None
 		enable_app_grouping: DF.Check
+		enable_chat: DF.Check
 		enable_email_pre_verification: DF.Check
 		enable_google_oauth: DF.Check
+		enable_mcp: DF.Check
 		enable_server_snapshot_recovery: DF.Check
 		enable_site_pooling: DF.Check
 		enable_spam_check: DF.Check
@@ -116,6 +176,7 @@ class PressSettings(Document):
 		hybrid_cluster: DF.Link | None
 		hybrid_domain: DF.Link | None
 		ic_key: DF.Password | None
+		latest_blog_url: DF.Data | None
 		log_server: DF.Link | None
 		mailgun_api_key: DF.Data | None
 		max_allowed_screenshots: DF.Int
@@ -144,11 +205,14 @@ class PressSettings(Document):
 		print_format: DF.Data | None
 		production_server_ip: DF.Data | None
 		publish_docs: DF.Check
+		pulse_api_key: DF.Data | None
+		pulse_site: DF.Data | None
 		razorpay_key_id: DF.Data | None
 		razorpay_key_secret: DF.Password | None
 		razorpay_webhook_secret: DF.Data | None
 		realtime_job_updates: DF.Check
 		redis_cache_size: DF.Int
+		region_name: DF.Data | None
 		remote_access_key_id: DF.Data | None
 		remote_link_expiry: DF.Int
 		remote_secret_access_key: DF.Password | None
@@ -199,6 +263,10 @@ class PressSettings(Document):
 		use_new_deploy_flow: DF.Check
 		use_staging_ca: DF.Check
 		verify_cards_with_micro_charge: DF.Literal["No", "Only INR", "Only USD", "Both INR and USD"]
+		wazuh_api_password: DF.Password | None
+		wazuh_api_url: DF.Data | None
+		wazuh_api_username: DF.Data | None
+		wazuh_api_verify_tls: DF.Check
 		wazuh_server: DF.Data | None
 		webroot_directory: DF.Data | None
 	# end: auto-generated types
@@ -210,7 +278,7 @@ class PressSettings(Document):
 
 	def validate(self):
 		if self.max_concurrent_physical_restorations > 5:
-			frappe.throw("Max Concurrent Physical Restorations should be less than 5")
+			frappe.throw("Please set Max Concurrent Physical Restorations to less than 5.")
 
 		if self.send_email_notifications:
 			if self.email_recipients:
@@ -220,10 +288,10 @@ class PressSettings(Document):
 					if not validate_email_address(email):
 						frappe.throw(f"Invalid email address: {email}")
 			else:
-				frappe.throw("Email Recipients List can not be empty")
+				frappe.throw("Please add at least one recipient to the Email Recipients List.")
 
 		if self.minimum_rebuild_memory < 2:
-			frappe.throw("Minimum rebuild memory needs to be 2 GB or more.")
+			frappe.throw("Please set the minimum rebuild memory to 2 GB or more.")
 
 	@frappe.whitelist()
 	def create_stripe_webhook(self):
@@ -322,7 +390,10 @@ class PressSettings(Document):
 		return Client(api_key_sid, api_key_secret, account_sid)
 
 	def get_default_apps(self):
-		if hasattr(self, "enable_app_grouping") and hasattr(self, "default_apps"):  # noqa
-			if self.enable_app_grouping:
-				return [app.app for app in self.default_apps]
+		if (
+			hasattr(self, "enable_app_grouping")
+			and hasattr(self, "default_apps")
+			and self.enable_app_grouping
+		):
+			return [app.app for app in self.default_apps]
 		return []

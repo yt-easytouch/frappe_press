@@ -31,16 +31,17 @@ from press.press.doctype.remote_file.test_remote_file import (
 from press.press.doctype.server.server import BaseServer, Server
 from press.press.doctype.site.site import (
 	ARCHIVE_AFTER_SUSPEND_DAYS,
+	NOTIFY_BEFORE_ARCHIVAL_DAYS,
 	Site,
 	archive_suspended_sites,
+	notify_sites_before_archival,
+	process_new_site_job_update,
 	process_rename_site_job_update,
 	suspend_sites_exceeding_disk_usage_for_last_14_days,
 )
-from press.press.doctype.site_activity.test_site_activity import create_test_site_activity
 from press.press.doctype.site_plan.test_site_plan import create_test_plan
 from press.press.doctype.team.test_team import create_test_team
 from press.press.doctype.telegram_message.telegram_message import TelegramMessage
-from press.saas.doctype.saas_settings.test_saas_settings import create_test_saas_settings
 from press.utils import get_current_team
 
 if typing.TYPE_CHECKING:
@@ -166,6 +167,7 @@ def create_test_site(
 			}
 		)
 		site.update(kwargs)
+		frappe.clear_document_cache("Site", site.name)
 		site.insert()
 		site.db_set("creation", creation)
 		site.reload()
@@ -527,33 +529,41 @@ class TestSite(FrappeTestCase):
 
 	@patch("press.press.doctype.site.site.frappe.db.commit", new=Mock())
 	@patch("press.press.doctype.site.site.frappe.db.rollback", new=Mock())
-	def test_archive_suspended_sites_archives_only_sites_with_backup_suspended_longer_than_days(self):
-		offsite_backup_plan = create_test_plan(
-			"Site", price_usd=5.0, price_inr=375.0, plan_name="Offsite Backup plan", offsite_backups=True
+	@patch("frappe.sendmail", new=Mock())
+	def test_archive_suspended_sites_and_notify_before_archival(self):
+		site_to_notify_and_archive = create_test_site()
+		site_to_notify_and_archive.db_set("status", "Suspended")
+		site_to_notify_and_archive.db_set(
+			"suspended_at",
+			frappe.utils.add_days(
+				frappe.utils.now_datetime(),
+				-(ARCHIVE_AFTER_SUSPEND_DAYS - NOTIFY_BEFORE_ARCHIVAL_DAYS),
+			),
 		)
-		site = create_test_site(plan=offsite_backup_plan.name)
-		site.db_set("status", "Suspended")
-		site_activity = create_test_site_activity(site.name, "Suspend Site")
-		site_activity.db_set(
-			"creation", frappe.utils.add_days(frappe.utils.now_datetime(), -ARCHIVE_AFTER_SUSPEND_DAYS - 1)
-		)
-		site2 = create_test_site(plan=offsite_backup_plan.name)
-		site2.db_set("status", "Suspended")
-		site2_activity = create_test_site_activity(site2.name, "Suspend Site")
-		site2_activity.db_set(
-			"creation", frappe.utils.add_days(frappe.utils.now_datetime(), -ARCHIVE_AFTER_SUSPEND_DAYS + 1)
-		)  # site2 suspended recently
-		site3 = create_test_site(plan=offsite_backup_plan.name)  # active site should not be archived
 
-		create_test_saas_settings(None, [create_test_app(), create_test_app("erpnext", "ERPNext")])
+		notify_sites_before_archival()
+		self.assertTrue(
+			frappe.db.exists(
+				"Site Activity",
+				{"site": site_to_notify_and_archive.name, "action": "Archive Notification"},
+			)
+		)
+
+		site_to_notify_and_archive.db_set(
+			"suspended_at",
+			frappe.utils.add_days(frappe.utils.now_datetime(), -ARCHIVE_AFTER_SUSPEND_DAYS - 1),
+		)
+
+		site_recent = create_test_site()
+		site_recent.db_set("status", "Suspended")
+		site_recent.db_set("suspended_at", frappe.utils.add_days(frappe.utils.now_datetime(), -3))
 
 		archive_suspended_sites()
-		site.reload()
-		site2.reload()
-		site3.reload()
-		self.assertEqual(site.status, "Pending")  # to be archived
-		self.assertEqual(site2.status, "Suspended")
-		self.assertEqual(site3.status, "Active")
+
+		site_to_notify_and_archive.reload()
+		site_recent.reload()
+		self.assertEqual(site_to_notify_and_archive.status, "Pending")  # site is being archived
+		self.assertEqual(site_recent.status, "Suspended")  # Do not archive recently suspended site
 
 	def test_site_usage_exceed_tracking(self):
 		team = create_test_team()
@@ -617,6 +627,55 @@ class TestSite(FrappeTestCase):
 		self.assertFalse(site.site_usage_exceeded)
 		self.assertIsNone(site.site_usage_exceeded_on)
 		self.assertEqual(site.status, "Active")
+
+	def test_subscription_is_disabled_when_site_creation_fails(self):
+		"""A failed site creation must disable the subscription so the user isn't billed (#6110)."""
+		from press.press.doctype.agent_job.test_agent_job import create_test_agent_job
+
+		plan = create_test_plan("Site", plan_name="USD 10")
+		site: Site = create_test_site(plan=plan.name)
+		site.create_subscription(plan=plan.name)
+
+		subscription = frappe.get_doc("Subscription", {"document_type": "Site", "document_name": site.name})
+		self.assertTrue(subscription.enabled)
+
+		job = create_test_agent_job("New Site", server=site.server, status="Failure")
+		job.db_set("site", site.name)
+
+		process_new_site_job_update(job)
+
+		self.assertEqual(frappe.db.get_value("Site", site.name, "status"), "Broken")
+		self.assertFalse(frappe.db.get_value("Subscription", subscription.name, "enabled"))
+
+	def test_subscription_is_reenabled_when_site_recovers_to_active(self):
+		"""A site recovering from a failed creation (retry/restore success) must re-enable the subscription (#6110)."""
+		from press.press.doctype.agent_job.test_agent_job import create_test_agent_job
+
+		plan = create_test_plan("Site", plan_name="USD 10")
+		site: Site = create_test_site(plan=plan.name)
+		site.create_subscription(plan=plan.name)
+		subscription = frappe.get_doc("Subscription", {"document_type": "Site", "document_name": site.name})
+
+		# Reproduce the disabled + Broken state left behind by a failed creation.
+		site.disable_subscription()
+		frappe.db.set_value("Site", site.name, "status", "Broken")
+		self.assertFalse(frappe.db.get_value("Subscription", subscription.name, "enabled"))
+
+		# Both creation jobs now succeed (retry / restore).
+		create_test_agent_job("Add Site to Upstream", server=site.server, status="Success").db_set(
+			"site", site.name
+		)
+		success_job = create_test_agent_job("New Site", server=site.server, status="Success")
+		success_job.db_set("site", site.name)
+
+		with (
+			patch.object(Site, "sync_apps", new=Mock()),
+			patch("press.press.doctype.site.site.marketplace_app_hook", new=Mock()),
+		):
+			process_new_site_job_update(success_job)
+
+		self.assertEqual(frappe.db.get_value("Site", site.name, "status"), "Active")
+		self.assertTrue(frappe.db.get_value("Subscription", subscription.name, "enabled"))
 
 	def test_reset_disk_usage_exceed_alert_on_changing_plan(self):
 		team = create_test_team()
@@ -688,3 +747,78 @@ class TestSite(FrappeTestCase):
 		suspend_sites_exceeding_disk_usage_for_last_14_days()
 		site.reload()
 		self.assertEqual(site.status, "Suspended")
+
+	def test_unavail_bahrain_backups_marks_only_bahrain_backups_unavailable(self):
+		from press.press.doctype.site_backup.test_site_backup import create_test_site_backup
+
+		site = create_test_site("bahrainsite")
+		bahrain_backup = create_test_site_backup(site=site.name, bucket="bahrain.backups.frappe.cloud")
+		other_backup = create_test_site_backup(site=site.name, bucket="mumbai.backups.frappe.cloud")
+
+		site.unavail_bahrain_backups()
+
+		self.assertEqual(
+			frappe.db.get_value("Site Backup", bahrain_backup.name, "files_availability"),
+			"Unavailable",
+		)
+		self.assertEqual(
+			frappe.db.get_value("Site Backup", other_backup.name, "files_availability"),
+			"Available",
+		)
+
+	def test_unavail_bahrain_backups_does_not_touch_status_field(self):
+		"""files_availability is flipped, but the backup's status stays a valid option."""
+		from press.press.doctype.site_backup.test_site_backup import create_test_site_backup
+
+		site = create_test_site("bahrainsite")
+		bahrain_backup = create_test_site_backup(
+			site=site.name, bucket="bahrain.backups.frappe.cloud", status="Success"
+		)
+
+		site.unavail_bahrain_backups()
+
+		self.assertEqual(frappe.db.get_value("Site Backup", bahrain_backup.name, "status"), "Success")
+
+	def test_unavail_bahrain_backups_only_affects_the_given_site(self):
+		from press.press.doctype.site_backup.test_site_backup import create_test_site_backup
+
+		this_site = create_test_site("bahrainsite")
+		other_site = create_test_site("otherbahrainsite")
+		this_backup = create_test_site_backup(site=this_site.name, bucket="bahrain.backups.frappe.cloud")
+		other_backup = create_test_site_backup(site=other_site.name, bucket="bahrain.backups.frappe.cloud")
+
+		this_site.unavail_bahrain_backups()
+
+		self.assertEqual(
+			frappe.db.get_value("Site Backup", this_backup.name, "files_availability"),
+			"Unavailable",
+		)
+		self.assertEqual(
+			frappe.db.get_value("Site Backup", other_backup.name, "files_availability"),
+			"Available",
+		)
+
+	@patch("press.press.doctype.remote_file.remote_file.delete_remote_backup_objects")
+	def test_delete_offsite_backups_skips_bahrain_backups(self, mock_delete):
+		"""Bahrain backups must not be sent to S3 deletion while the bucket is unhealthy."""
+		from press.press.doctype.site_backup.test_site_backup import create_test_site_backup
+
+		site = create_test_site("bahrainsite")
+		bahrain_backup = create_test_site_backup(site=site.name, bucket="bahrain.backups.frappe.cloud")
+		other_backup = create_test_site_backup(site=site.name, bucket="mumbai.backups.frappe.cloud")
+
+		site.delete_offsite_backups(keep_latest=False)
+
+		deleted_files = mock_delete.call_args.args[0]
+		bahrain_files = {
+			bahrain_backup.remote_database_file,
+			bahrain_backup.remote_public_file,
+			bahrain_backup.remote_private_file,
+		}
+		other_files = {
+			other_backup.remote_database_file,
+			other_backup.remote_public_file,
+			other_backup.remote_private_file,
+		}
+		self.assertTrue(bahrain_files.isdisjoint(deleted_files))
+		self.assertTrue(other_files.issubset(set(deleted_files)))

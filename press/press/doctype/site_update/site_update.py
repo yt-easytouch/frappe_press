@@ -126,9 +126,6 @@ class SiteUpdate(Document):
 		return doc
 
 	def validate(self):
-		if not self.is_new():
-			return
-
 		# Assume same-group migration if destination_group isn't set
 		if not self.destination_group:
 			self.destination_group = self.group
@@ -237,7 +234,7 @@ class SiteUpdate(Document):
 
 	def before_insert(self):
 		self.backup_type = "Logical"
-		site: "Site" = frappe.get_cached_doc("Site", self.site)
+		site: "Site" = frappe.get_doc("Site", self.site)
 		site.check_move_scheduled()
 		site.check_fatal_site_update()
 
@@ -358,6 +355,27 @@ class SiteUpdate(Document):
 		else:
 			self.create_update_site_agent_request()
 
+	def fail_with_notification(self, reason: str):
+		frappe.db.set_value("Site Update", self.name, "status", "Cancelled")
+		site = frappe.get_cached_doc("Site", self.site)
+		message = f"Site Update was cancelled: {reason}"
+		self.create_notification(site.team, message)
+
+	def create_notification(self, team: str, message: str):
+		frappe.get_doc(
+			{
+				"doctype": "Press Notification",
+				"team": team,
+				"type": "Site Update",
+				"document_type": "Site Update",
+				"document_name": self.name,
+				"reference_doctype": "Site",
+				"reference_name": self.site,
+				"message": message,
+			}
+		).insert(ignore_permissions=True)
+		frappe.publish_realtime("press_notification", doctype="Press Notification", message={"team": team})
+
 	def get_before_migrate_scripts(self, rollback=False):
 		site_apps = [app.app for app in frappe.get_doc("Site", self.site).apps]
 
@@ -464,6 +482,7 @@ class SiteUpdate(Document):
 			"Site Update",
 			{
 				"site": self.site,
+				"name": ("!=", self.name),
 				"source_candidate": self.source_candidate,
 				"destination_candidate": self.destination_candidate,
 				"cause_of_failure_is_resolved": False,
@@ -475,6 +494,7 @@ class SiteUpdate(Document):
 			"Site Update",
 			{
 				"site": self.site,
+				"name": ("!=", self.name),
 				"status": ("in", ("Pending", "Running", "Failure", "Scheduled", "Recovering")),
 			},
 		)
@@ -581,7 +601,9 @@ class SiteUpdate(Document):
 					return
 				if physical_backup_restoration_status != "Success":
 					# just to be safe
-					frappe.throw("Physical Backup Restoration is still in progress")
+					frappe.throw(
+						"The physical backup restoration is still in progress. Please wait for it to finish before retrying the site update."
+					)
 
 			# Attempt to move site to source bench
 
@@ -848,7 +870,7 @@ def sites_with_available_update(server=None):
 			"skip_auto_updates": False,
 			"fatal_site_update": ("is", "not set"),
 		},
-		fields=["name", "timezone", "bench", "server", "status"],
+		fields=["name", "timezone", "bench", "server", "status", "is_standby"],
 	)
 
 
@@ -959,8 +981,10 @@ def should_try_update(site: Site):
 	)
 
 
-def is_site_in_deploy_hours(site):
+def is_site_in_deploy_hours(site: Site):
 	if site.status in ("Inactive", "Suspended"):
+		return True
+	if site.is_standby:
 		return True
 	server_time = datetime.now()
 	timezone = site.timezone or "Asia/Kolkata"
@@ -1058,6 +1082,12 @@ def handle_success(job: AgentJob, site_update: OngoingUpdate):
 		SiteUpdate("Site Update", site_update.name).trigger_post_migration_stage_logical_replication_backup()
 	else:
 		frappe.get_doc("Site", job.site).reset_previous_status(fix_broken=True)
+
+	if job.site:
+		try:
+			frappe.get_doc("Site", job.site).sync_apps()
+		except Exception:
+			log_error("Site App Sync Failed After Site Update", job=job.as_dict())
 
 
 def handle_fatal(job: AgentJob, site_update: OngoingUpdate):
@@ -1187,6 +1217,9 @@ def run_scheduled_updates():
 
 			site_update.validate()
 			site_update.start()
+			frappe.db.commit()
+		except frappe.ValidationError as e:
+			site_update.fail_with_notification(str(e))
 			frappe.db.commit()
 		except Exception:
 			log_error("Scheduled Site Update Error", update=update)
