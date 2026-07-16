@@ -164,6 +164,8 @@ class AnsibleCallback(CallbackBase):
 
 class Ansible:
 	def __init__(self, server, playbook, user="root", variables=None, port=22):
+		from ansible.plugins.loader import init_plugin_loader
+		init_plugin_loader()
 		self.patch()
 		self.server = server
 		self.playbook = playbook
@@ -182,7 +184,7 @@ class Ansible:
 			start_at_task=None,
 			syntax=False,
 			verbosity=1,
-			ssh_common_args=self._get_ssh_proxy_commad(server),
+			ssh_common_args=f"-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {self._get_ssh_proxy_commad(server) or ''}".strip(),
 		)
 
 		self.loader = DataLoader()

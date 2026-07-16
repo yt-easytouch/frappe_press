@@ -50,7 +50,7 @@
   when: is_proxy_server | bool
 
 - name: Enable ProxySQL Auditing
-  mysql_query:
+  community.mysql.mysql_query:
     login_user: frappe
     login_password: "{{ proxysql_admin_password }}"
     login_host: 127.0.0.1

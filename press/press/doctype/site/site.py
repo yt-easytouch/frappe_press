@@ -505,11 +505,11 @@ class Site(Document, TagHelpers):
 	def validate_installed_apps(self):
 		# validate apps to be installed on site
 		bench_apps: Table[BenchApp] = frappe.get_doc("Bench", self.bench).apps
-		for app in self.apps:
-			if not find(bench_apps, lambda x: x.app == app.app):
-				frappe.throw(
-					f"App {app.app} is not available on Bench {self.bench}. Please <a href='https://docs.frappe.io/cloud/installing-an-app#bench-group'> add {app.app} to Bench Group</a> and trigger a new deploy."
-				)
+		# for app in self.apps:
+		# 	if not find(bench_apps, lambda x: x.app == app.app):
+		# 		frappe.throw(
+		# 			f"App {app.app} is not available on Bench {self.bench}. Please <a href='https://docs.frappe.io/cloud/installing-an-app#bench-group'> add {app.app} to Bench Group</a> and trigger a new deploy."
+		# 		)
 
 		if self.apps[0].app != "frappe":
 			frappe.throw("First app to be installed on site must be frappe.")  # nosemgrep

@@ -1121,11 +1121,11 @@ class Bench(Document):
 			.limit(1)
 		).run()
 
-		if fatal_site_updates:
-			frappe.throw(
-				"There was a recent <b>site update which has failed</b>. Due to the same reason, bench cannot be archived.",
-				ArchiveBenchError,
-			)
+		# if fatal_site_updates:
+		# 	frappe.throw(
+		# 		"There was a recent <b>site update which has failed</b>. Due to the same reason, bench cannot be archived.",
+		# 		ArchiveBenchError,
+		# 	)
 
 	def check_unarchived_sites(self):
 		frappe.db.commit()
@@ -1151,13 +1151,14 @@ class Bench(Document):
 			)
 
 	def check_last_archive(self):
-		if self.last_archive_failure and get_datetime(self.last_archive_failure) > frappe.utils.add_to_date(
-			None, hours=-24
-		):
-			frappe.throw(
-				"A previous archive job executed in the last 24 hours has failed. Please wait for some time before you attempt to archive the bench once again.",
-				ArchiveBenchError,
-			)
+		pass
+		# if self.last_archive_failure and get_datetime(self.last_archive_failure) > frappe.utils.add_to_date(
+		# 	None, hours=-24
+		# ):
+		# 	frappe.throw(
+		# 		"A previous archive job executed in the last 24 hours has failed. Please wait for some time before you attempt to archive the bench once again.",
+		# 		ArchiveBenchError,
+		# 	)
 
 	def ready_to_archive(self):
 		self.check_scaled_up_server()

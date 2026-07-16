@@ -52,6 +52,7 @@ class TestTLSCertificate(FrappeTestCase):
 	def tearDown(self):
 		frappe.db.rollback()
 
+	@patch.object(ScmeSH, "_obtain", new=Mock())
 	def test_renewal_of_secondary_wildcard_domains_updates_server(self):
 		erpnext_domain = create_test_root_domain("erpnext.xyz")
 		fc_domain = create_test_root_domain("fc.dev")
@@ -68,6 +69,7 @@ class TestTLSCertificate(FrappeTestCase):
 			cert._obtain_certificate()
 		mock_setup_wildcard_hosts.assert_called_once()
 
+	@patch.object(ScmeSH, "_obtain", new=Mock())
 	def test_renewal_of_primary_wildcard_domains_doesnt_call_setup_wildcard_domains(self):
 		erpnext_domain = create_test_root_domain("erpnext.xyz")
 		fc_domain = create_test_root_domain("fc.dev")
@@ -85,6 +87,7 @@ class TestTLSCertificate(FrappeTestCase):
 
 		mock_setup_wildcard_hosts.assert_not_called()
 
+	@patch.object(ScmeSH, "_obtain", new=Mock())
 	def test_renewal_of_primary_domain_calls_update_tls_certificates(self):
 		# Use a diffferent domain to avoid any chance of
 		# Reusing same non wildcard domain in tests
@@ -136,6 +139,7 @@ class TestTLSCertificate(FrappeTestCase):
 			dns_20i_bearer="token",
 			challenge_alias="_acme-challenge.validation.example.com",
 			acme_sh_path="/usr/local/acme.sh/acme.sh",
+			use_staging_ca=1,
 		)
 		ca = ScmeSH(settings)
 
@@ -146,3 +150,8 @@ class TestTLSCertificate(FrappeTestCase):
 		self.assertIn("--dns dns_20i", command)
 		self.assertIn("--bearer token", command)
 		self.assertIn("--challenge-alias _acme-challenge.validation.example.com", command)
+		if frappe.conf.developer_mode:
+			self.assertIn("--server letsencrypt_test", command)
+		else:
+			self.assertIn("--server letsencrypt", command)
+

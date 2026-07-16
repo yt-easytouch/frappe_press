@@ -648,6 +648,10 @@ class ScmeSH(BaseCA):
 		self.eff_registration_email = settings.eff_registration_email
 		self.bearer_token = self._get_bearer_token()
 		self.challenge_alias = getattr(settings, "challenge_alias", None)
+		if frappe.conf.developer_mode and settings.use_staging_ca:
+			self.staging = True
+		else:
+			self.staging = False
 
 	def _obtain(self):
 		acme_home = self.acme_root
@@ -661,11 +665,11 @@ class ScmeSH(BaseCA):
 			if self.wildcard or frappe.conf.developer_mode
 			else f"--webroot {self.webroot_directory}"
 		)
-		staging = "--staging" if frappe.conf.developer_mode else ""
+		server = "letsencrypt_test" if self.staging else "letsencrypt"
 		challenge_alias = f"--challenge-alias {self.challenge_alias}" if self.challenge_alias else ""
 
 		command = (
-			f"{self.acme_sh_path} --issue {plugin} {staging} --force "
+			f"{self.acme_sh_path} --issue {plugin} --server {server} --force "
 			f"--keylength {self.rsa_key_size} "
 			f"-d {self.domain} "
 			f"--home {acme_home} "
@@ -711,16 +715,16 @@ class ScmeSH(BaseCA):
 
 	@property
 	def certificate_file(self):
-		return os.path.join(self.acme_root, "live", self.domain, f"{self.domain}.cer")
+		return os.path.join(self.acme_root, self.domain, f"{self.domain}.cer")
 
 	@property
 	def full_chain_file(self):
-		return os.path.join(self.acme_root, "live", self.domain, "fullchain.cer")
+		return os.path.join(self.acme_root, self.domain, "fullchain.cer")
 
 	@property
 	def intermediate_chain_file(self):
-		return os.path.join(self.acme_root, "live", self.domain, "ca.cer")
+		return os.path.join(self.acme_root, self.domain, "ca.cer")
 
 	@property
 	def private_key_file(self):
-		return os.path.join(self.acme_root, "live", self.domain, f"{self.domain}.key")
+		return os.path.join(self.acme_root, self.domain, f"{self.domain}.key")
