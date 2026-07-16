@@ -4,6 +4,7 @@
 
 import frappe
 from frappe.utils.caching import redis_cache
+from frappe.utils import get_system_timezone
 
 from press.utils import (
 	chat_enabled,
@@ -70,6 +71,7 @@ def get_boot():
 			)[0]
 		),
 		user=get_user(),
+		system_timezone=get_system_timezone(),
 	)
 
 

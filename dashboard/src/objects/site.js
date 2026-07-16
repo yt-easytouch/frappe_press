@@ -737,12 +737,12 @@ export default {
 						const backup_name = getQueryParam('name')
 						let filters = backup_name
 							? [
-									{
-										type: 'text',
-										label: 'Backup Record',
-										fieldname: 'name',
-									},
-								]
+								{
+									type: 'text',
+									label: 'Backup Record',
+									fieldname: 'name',
+								},
+							]
 							: []
 						filters = filters.concat([
 							{
@@ -773,13 +773,11 @@ export default {
 								title: 'Download Backup',
 								message: `You will be downloading the ${getFileName(
 									file,
-								)} backup of the site <b>${
-									site.doc?.host_name || site.doc?.name
-								}</b> that was created on ${date(backup.creation, 'llll')}.${
-									!backup.offsite
+								)} backup of the site <b>${site.doc?.host_name || site.doc?.name
+									}</b> that was created on ${date(backup.creation, 'llll')}.${!backup.offsite
 										? '<br><br><div class="p-2 bg-surface-gray-2 rounded border-outline-gray-1">You have to be logged in as a <b>System Manager</b> <em>in your site</em> to download the backup.<div>'
 										: ''
-								}`,
+									}`,
 								onSuccess({ hide }) {
 									downloadBackup(backup, file, hide)
 								},
@@ -1476,9 +1474,8 @@ export default {
 																							row.source_hash.slice(0, 7),
 																						variant: 'ghost',
 																						class: 'font-mono',
-																						link: `${
-																							row.diff_url.split('/compare')[0]
-																						}/commit/${row.source_hash}`,
+																						link: `${row.diff_url.split('/compare')[0]
+																							}/commit/${row.source_hash}`,
 																					}
 																				},
 																			},
@@ -1493,9 +1490,8 @@ export default {
 																							row.destination_hash.slice(0, 7),
 																						variant: 'ghost',
 																						class: 'font-mono',
-																						link: `${
-																							row.diff_url.split('/compare')[0]
-																						}/commit/${row.destination_hash}`,
+																						link: `${row.diff_url.split('/compare')[0]
+																							}/commit/${row.destination_hash}`,
 																					}
 																				},
 																			},
@@ -1884,27 +1880,113 @@ export default {
 								confirmDialog({
 									title: 'Login as Administrator',
 									message: `Are you sure you want to login as administrator on the site <b>${site.doc?.name}</b>?`,
-									fields:
-										$team.name !== site.doc.team || $team.doc.is_desk_user
-											? [
-													{
-														label: 'Reason',
-														type: 'textarea',
-														fieldname: 'reason',
-													},
-												]
-											: [],
+									fields: (() => {
+										if ($team.name === site.doc.team && !$team.doc.is_desk_user) {
+											return []
+										}
+
+										const defaultSuggestions = [
+
+											'Fixed POS Prints',
+											'Update on item prices',
+											'Fixed POS system linked',
+
+											'Investigate / Debug site issue',
+											'App installation / upgrade',
+											'Database maintenance / migration',
+											'Configure site settings',
+										]
+
+										const suggestedReasonField = {
+											label: 'Suggested Reason',
+											type: 'select',
+											fieldname: 'suggested_reason',
+											options: [],
+										}
+
+										const buildOptions = () => {
+											let storedReasons = []
+											try {
+												const stored = localStorage.getItem('admin_login_reasons')
+												storedReasons = stored ? JSON.parse(stored) : []
+											} catch (e) {
+												// ignore
+											}
+											const allSuggestions = Array.from(new Set([...defaultSuggestions, ...storedReasons]))
+											suggestedReasonField.options = [
+												{ label: 'Select a suggestion...', value: '' },
+												...allSuggestions.map((r) => ({ label: r, value: r })),
+												{ label: 'Write custom reason...', value: 'custom' },
+												...(storedReasons.length > 0
+													? [{ label: '❌ Clear saved reasons history', value: 'clear_history' }]
+													: []),
+											]
+										}
+
+										buildOptions()
+
+										const reasonField = {
+											label: 'Reason',
+											type: 'textarea',
+											fieldname: 'reason',
+											condition: (values) => {
+												if (values.suggested_reason === 'clear_history') {
+													try {
+														localStorage.removeItem('admin_login_reasons')
+													} catch (e) {
+														// ignore
+													}
+													values.suggested_reason = ''
+													buildOptions()
+												}
+												return !values.suggested_reason || values.suggested_reason === 'custom'
+											},
+										}
+
+										const saveToLocalStorageField = {
+											label: 'Save reason to local storage for future logins',
+											fieldname: 'save_to_local',
+											type: 'checkbox',
+											default: true,
+											condition: (values) => !values.suggested_reason || values.suggested_reason === 'custom',
+										}
+
+										return [suggestedReasonField, reasonField, saveToLocalStorageField]
+									})(),
 									onSuccess: ({ hide, values }) => {
+										let finalReason = values.suggested_reason
+										if (finalReason === 'custom' || !finalReason) {
+											finalReason = values.reason
+										}
+
 										if (
-											!values.reason &&
+											!finalReason &&
 											($team.name !== site.doc.team || $team.doc.is_desk_user)
 										) {
 											throw new Error(
 												'Reason is required. Enter why you are logging in as Administrator before continuing.',
 											)
 										}
+
+										// Save custom reason to local storage if save_to_local is true
+										if (values.save_to_local && values.suggested_reason === 'custom' && finalReason) {
+											try {
+												let stored = localStorage.getItem('admin_login_reasons')
+												let storedReasons = stored ? JSON.parse(stored) : []
+												const trimmed = finalReason.trim()
+												if (trimmed) {
+													storedReasons = storedReasons.filter((r) => r !== trimmed)
+													storedReasons.unshift(trimmed)
+													storedReasons = storedReasons.slice(0, 10)
+													localStorage.setItem('admin_login_reasons', JSON.stringify(storedReasons))
+												}
+											} catch (e) {
+												// ignore
+											}
+										}
+
 										return site.loginAsAdmin
-											.submit({ reason: values.reason })
+											.submit({ reason: finalReason })
 											.then((result) => {
 												let url = result
 												window.open(url, '_blank')

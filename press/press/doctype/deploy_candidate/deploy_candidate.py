@@ -78,6 +78,7 @@ class DeployCandidate(Document):
 		gunicorn_threads_per_worker: DF.Int
 		intel_build: DF.Link | None
 		is_redisearch_enabled: DF.Check
+		is_code_server_enabled: DF.Check
 		merge_all_rq_queues: DF.Check
 		merge_default_and_short_rq_queues: DF.Check
 		packages: DF.Table[DeployCandidatePackage]
