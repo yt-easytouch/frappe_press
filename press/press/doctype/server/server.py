@@ -591,6 +591,8 @@ class BaseServer(Document, TagHelpers):
 
 	@frappe.whitelist()
 	def create_dns_record(self):
+		if not self.domain or self.domain == "None":
+			return
 		try:
 			domain = frappe.get_doc("Root Domain", self.domain)
 
@@ -1293,7 +1295,7 @@ class BaseServer(Document, TagHelpers):
 
 	def find_mountpoint_volume(self, mountpoint) -> "VirtualMachineVolume" | None:
 		volume_id = None
-		if self.provider == "Generic":
+		if self.provider == "Generic" or not self.virtual_machine or self.virtual_machine == "None":
 			return None
 
 		machine: "VirtualMachine" = frappe.get_doc("Virtual Machine", self.virtual_machine)
@@ -1316,7 +1318,7 @@ class BaseServer(Document, TagHelpers):
 		return find(machine.volumes, lambda v: v.device == "/dev/sda1")
 
 	def update_virtual_machine_name(self):
-		if not self.virtual_machine:
+		if not self.virtual_machine or self.virtual_machine == "None":
 			return None
 		virtual_machine = frappe.get_doc("Virtual Machine", self.virtual_machine)
 		return virtual_machine.update_name_tag(self.name)
@@ -1952,7 +1954,7 @@ class BaseServer(Document, TagHelpers):
 		self.save()
 
 	def validate_mounts(self):
-		if not self.virtual_machine:
+		if not self.virtual_machine or self.virtual_machine == "None":
 			return
 		machine = frappe.get_doc("Virtual Machine", self.virtual_machine)
 		if machine.data_disk_snapshot and not machine.data_disk_snapshot_attached:
@@ -1967,6 +1969,8 @@ class BaseServer(Document, TagHelpers):
 			self.set_mount_properties()
 
 	def fetch_volumes_from_virtual_machine(self):
+		if not self.virtual_machine or self.virtual_machine == "None":
+			return
 		machine = frappe.get_doc("Virtual Machine", self.virtual_machine)
 		for volume in machine.volumes:
 			if volume.device == "/dev/sda1" or (self.provider == "Hetzner" and volume.device == "/dev/sda"):
@@ -2054,6 +2058,8 @@ class BaseServer(Document, TagHelpers):
 			return f"/dev/disk/by-id/scsi-0HC_Volume_{volume_id}"
 
 		if self.provider == "Frappe Compute":
+			if not self.virtual_machine or self.virtual_machine == "None":
+				return None
 			virtual_machine = frappe.get_doc("Virtual Machine", self.virtual_machine)
 			volume = find(virtual_machine.volumes, lambda i: i.volume_id == volume_id)
 			return volume.device

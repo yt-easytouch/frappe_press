@@ -233,5 +233,10 @@ class CustomUser(User):
 
 
 def before_after_migrate():
-	# frappe.clear_cache() on press doesn't clear everything. See hooks.py
+	# frappe.clear_cache() on press doesn't clear everything. See hooks.py.
+	# We use flushall() but preserve the session hash so users aren't logged out.
+	session_key = frappe.cache.make_key("session")
+	dump = frappe.cache.dump(session_key)
 	frappe.cache.flushall()
+	if dump:
+		frappe.cache.restore(session_key, 0, dump, replace=True)
