@@ -4,21 +4,38 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
+import hmac
+import json
 import re
-from base64 import b64decode
+from base64 import b64decode, urlsafe_b64decode, urlsafe_b64encode
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
+from urllib.parse import urlencode, urlparse
 
 import frappe
 import jwt
 import requests
 import tomli
+from frappe.utils.verified_command import get_secret
 
-from press.utils import get_current_team, log_error
+from press.utils import docs, get_current_team, log_error
 
 if TYPE_CHECKING:
 	from press.press.doctype.github_webhook_log.github_webhook_log import GitHubWebhookLog
+
+
+DEFAULT_GITHUB_REDIRECT_PATH = "/dashboard"
+GITHUB_OAUTH_STATE_MAX_AGE = timedelta(minutes=10)
+
+
+class GithubFetchError(Exception):
+	pass
+
+
+class InvalidGitHubOAuthState(frappe.ValidationError):
+	pass
 
 
 class AppDependencyFetch(TypedDict):
@@ -58,6 +75,63 @@ def hook(*args, **kwargs):
 		raise Exception from e
 
 
+def get_installation_data(team: str, redirect_url: str | None = None) -> dict[str, str]:
+	public_link = frappe.db.get_single_value("Press Settings", "github_app_public_link")
+	return {
+		"installation_url": f"{public_link}/installations/new",
+		"state": encode_github_oauth_state(team, redirect_url),
+	}
+
+
+def encode_github_oauth_state(team: str, redirect_url: str | None = None) -> str:
+	payload = {
+		"issued_at": int(datetime.now().timestamp()),
+		"redirect_url": get_safe_github_redirect_url(redirect_url),
+		"team": team,
+		"user": frappe.session.user,
+	}
+	encoded_payload = _encode_github_state_payload(payload)
+	return f"{encoded_payload}.{_sign_github_oauth_state(encoded_payload)}"
+
+
+def decode_github_oauth_state(state: str) -> dict[str, str]:
+	try:
+		encoded_payload, signature = state.rsplit(".", 1)
+	except ValueError as exc:
+		raise InvalidGitHubOAuthState("Invalid GitHub authorization state") from exc
+
+	expected_signature = _sign_github_oauth_state(encoded_payload)
+	if not hmac.compare_digest(signature, expected_signature):
+		raise InvalidGitHubOAuthState("Invalid GitHub authorization state")
+
+	try:
+		payload = json.loads(_decode_github_state_payload(encoded_payload))
+	except Exception as exc:
+		raise InvalidGitHubOAuthState("Invalid GitHub authorization state") from exc
+
+	redirect_url = get_safe_github_redirect_url(payload.get("redirect_url"))
+	issued_at = payload.get("issued_at")
+	team = payload.get("team")
+	user = payload.get("user")
+
+	if (
+		not team
+		or not isinstance(team, str)
+		or not user
+		or not isinstance(user, str)
+		or not isinstance(issued_at, int)
+	):
+		raise InvalidGitHubOAuthState("Invalid GitHub authorization state")
+
+	if datetime.now().timestamp() - issued_at > GITHUB_OAUTH_STATE_MAX_AGE.total_seconds():
+		raise InvalidGitHubOAuthState("Invalid GitHub authorization state")
+
+	if user != frappe.session.user:
+		raise InvalidGitHubOAuthState("Invalid GitHub authorization state")
+
+	return {"redirect_url": redirect_url, "team": team}
+
+
 def get_jwt_token():
 	key = frappe.db.get_single_value("Press Settings", "github_app_private_key")
 	app_id = frappe.db.get_single_value("Press Settings", "github_app_id")
@@ -88,28 +162,77 @@ def get_access_token(installation_id: str | None = None):
 
 
 @frappe.whitelist()
-def clear_token_and_get_installation_url():
-	clear_current_team_access_token()
-	public_link = frappe.db.get_single_value("Press Settings", "github_app_public_link")
-	return f"{public_link}/installations/new"
-
-
-def clear_current_team_access_token():
+def clear_token_and_get_installation_url(redirect_url: str | None = None):
 	team = get_current_team()
+	clear_current_team_access_token(team)
+	return get_installation_data(team, redirect_url)
+
+
+def clear_current_team_access_token(team: str | None = None):
+	team = team or get_current_team()
 	frappe.db.set_value("Team", team, "github_access_token", "")  # clear access token
 
 
 @frappe.whitelist()
-def options():
+def options(redirect_url: str | None = None):
 	team = get_current_team()
 	token = frappe.db.get_value("Team", team, "github_access_token")
-	public_link = frappe.db.get_single_value("Press Settings", "github_app_public_link")
+	installation_data = get_installation_data(team, redirect_url)
 
 	return {
 		"authorized": bool(token),
-		"installation_url": f"{public_link}/installations/new",
+		**installation_data,
 		"installations": installations(token) if token else [],
 	}
+
+
+def get_safe_github_redirect_url(redirect_url: str | None = None) -> str:
+	if not redirect_url:
+		return DEFAULT_GITHUB_REDIRECT_PATH
+
+	parsed_redirect_url = urlparse(redirect_url)
+	if parsed_redirect_url.scheme or parsed_redirect_url.netloc:
+		parsed_site_url = urlparse(frappe.utils.get_url())
+		if (
+			parsed_redirect_url.scheme != parsed_site_url.scheme
+			or parsed_redirect_url.netloc != parsed_site_url.netloc
+		):
+			return DEFAULT_GITHUB_REDIRECT_PATH
+
+	redirect_path = parsed_redirect_url.path or DEFAULT_GITHUB_REDIRECT_PATH
+	if not redirect_path.startswith("/dashboard"):
+		return DEFAULT_GITHUB_REDIRECT_PATH
+
+	if parsed_redirect_url.query:
+		redirect_path = f"{redirect_path}?{parsed_redirect_url.query}"
+
+	if parsed_redirect_url.fragment:
+		redirect_path = f"{redirect_path}#{parsed_redirect_url.fragment}"
+
+	return redirect_path
+
+
+def get_github_callback_login_redirect(code: str | None, state: str | None) -> str:
+	login_url = "/dashboard/login"
+	if not (code and state):
+		return frappe.utils.get_url(login_url)
+
+	callback_url = f"/github/authorize?{urlencode({'code': code, 'state': state})}"
+	return frappe.utils.get_url(f"{login_url}?{urlencode({'redirect': callback_url})}")
+
+
+def _decode_github_state_payload(payload: str) -> str:
+	padding = "=" * (-len(payload) % 4)
+	return urlsafe_b64decode(f"{payload}{padding}").decode()
+
+
+def _encode_github_state_payload(payload: dict[str, str | int]) -> str:
+	encoded_payload = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
+	return urlsafe_b64encode(encoded_payload).decode().rstrip("=")
+
+
+def _sign_github_oauth_state(encoded_payload: str) -> str:
+	return hmac.new(get_secret().encode(), encoded_payload.encode(), digestmod=hashlib.sha256).hexdigest()
 
 
 def fetch_installations(token):
@@ -183,7 +306,7 @@ def repositories(installation, token):
 
 
 @frappe.whitelist()
-def repository(owner, name, installation=None):
+def repository(owner: str, name: str, installation: str | None = None):
 	token = ""
 	if not installation:
 		token = frappe.db.get_value("Press Settings", "github_access_token")
@@ -218,7 +341,7 @@ def repository(owner, name, installation=None):
 
 
 @frappe.whitelist()
-def app(owner, repository, branch, installation=None):
+def app(owner: str, repository: str, branch: str, installation: str | None = None):
 	headers = get_auth_headers(installation)
 	response = requests.get(
 		f"https://api.github.com/repos/{owner}/{repository}/branches/{branch}",
@@ -241,7 +364,9 @@ def app(owner, repository, branch, installation=None):
 	# Force pyproject.toml as a setup file
 	if "pyproject.toml" not in tree:
 		reason = "pyproject.toml does not exist in app directory."
-		frappe.throw(f"Not a valid Frappe App! {reason}")
+		frappe.throw(
+			f"This repository isn't a valid Frappe app. {reason} Please add a pyproject.toml at the app's root and try again. {docs.doc_link(docs.CUSTOM_APP)}."
+		)
 
 	app_name, title = _get_app_name_and_title_from_hooks(
 		owner,
@@ -262,7 +387,7 @@ def app(owner, repository, branch, installation=None):
 
 
 @frappe.whitelist()
-def branches(owner, name, installation=None, app_source=None):
+def branches(owner: str, name: str, installation: str | None = None, app_source: str | None = None):
 	"""
 	Return ALL branches for the repo, following GitHub pagination.
 	"""
@@ -271,7 +396,7 @@ def branches(owner, name, installation=None, app_source=None):
 
 	headers = get_auth_headers(installation)
 
-	out = []
+	out: list[dict] = []
 	page = 1
 	while True:
 		resp = requests.get(
@@ -317,7 +442,9 @@ def _get_compatible_frappe_version_from_pyproject(
 	).json()
 
 	if "content" not in pyproject:
-		frappe.throw("Could not fetch pyproject.toml file.")
+		frappe.throw(
+			"We couldn't read the pyproject.toml file from this repository. Please make sure it exists at the app's root and that the selected branch is correct."
+		)
 
 	pyproject = b64decode(pyproject["content"]).decode()
 
@@ -368,7 +495,7 @@ def _get_app_name_and_title_from_hooks(
 	branch_info,
 	headers,
 	tree,
-) -> tuple[str, str] | None:
+) -> tuple[str, str]:
 	reason_for_invalidation = f"Files {frappe.bold('hooks.py or patches.txt')} not found."
 	for directory, files in tree.items():
 		if not files:
@@ -405,7 +532,7 @@ def _get_app_name_and_title_from_hooks(
 		break
 
 	frappe.throw(f"Not a valid Frappe App! {reason_for_invalidation}")
-	return None
+	raise  # for mypy: NoReturn
 
 
 def _generate_files_tree(files):
@@ -449,26 +576,32 @@ def _get_pyproject_from_commit(app_source: str, commit: str):
 		frappe.throw("Invalid pyproject.toml file found in the app repository.", frappe.ValidationError)
 
 
-def get_dependant_apps_with_versions(app_source: str, commit: str, cache: bool = True) -> AppDependencyFetch:
-	"""Get a list of apps that are required by the given repository and commit."""
+def get_dependant_apps_with_versions(
+	app_source: str,
+	commit: str,
+	cache: bool = True,
+	raises: bool = True,
+) -> AppDependencyFetch:
+	"""Return app dependencies and Python version for a repository at a given commit."""
 	cache_key = f"app_deps:{app_source}:{commit}"
 
-	if cache:
-		cached_deps = frappe.cache().get_value(cache_key)
-		if cached_deps is not None:
-			return cached_deps
+	if cache and (cached := frappe.cache().get_value(cache_key)) is not None:
+		return cached
 
-	pyproject = _get_pyproject_from_commit(app_source, commit)
-	frappe_dependencies = pyproject.get("tool", {}).get("bench", {}).get("frappe-dependencies", {})
-	# We can safely remove frappe from the dependencies as it will be added by defult.
-	frappe_dependencies.pop("frappe", None)
-	python_version = pyproject.get("project", {}).get("requires-python")
+	try:
+		pyproject = _get_pyproject_from_commit(app_source, commit)
+	except frappe.ValidationError as exc:
+		if raises:
+			raise exc
 
-	dependency_data = AppDependencyFetch(
-		frappe_dependencies=frappe_dependencies,
-		python_version=python_version,
-	)
+		dependency_data = AppDependencyFetch(frappe_dependencies={}, python_version=None)
+	else:
+		frappe_dependencies = pyproject.get("tool", {}).get("bench", {}).get("frappe-dependencies", {}).copy()
+		dependency_data = AppDependencyFetch(
+			frappe_dependencies=frappe_dependencies,
+			python_version=pyproject.get("project", {}).get("requires-python"),
+		)
 
+	# In case of failures as well we want to cache the result to avoid hitting GitHub
 	frappe.cache().set_value(cache_key, dependency_data, expires_in_sec=60 * 60)
-
 	return dependency_data

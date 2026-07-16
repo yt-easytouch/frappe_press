@@ -35,7 +35,7 @@
 								</Button>
 								<Button
 									:loading="$resources.googleLogin.loading"
-									@click="$resources.googleLogin.submit()"
+									@click="continueWithGoogle"
 								>
 									<div class="flex items-center">
 										<GoogleIcon class="w-4" />
@@ -295,19 +295,19 @@
 							class="mt-4 flex flex-col"
 							v-if="!hasForgotPassword && !isOauthLogin && !is2FA"
 						>
-							<div v-if="$route.name === 'Signup'">
-								<span class="text-base font-normal text-gray-600">
+							<div class="text-p-base" v-if="$route.name === 'Signup'">
+								<span class="text-ink-gray-6">
 									{{ 'By signing up, you agree to our ' }}
 								</span>
 								<a
-									class="text-base font-normal text-gray-900 underline hover:text-gray-700"
+									class="text-ink-gray-9 underline hover:text-ink-gray-7"
 									href="https://frappecloud.com/policies"
 								>
 									Terms & Policies
 								</a>
 							</div>
-							<div v-if="!(otpRequested || resetPasswordEmailSent)">
-								<span class="text-base font-normal text-gray-600">
+							<div class="mt-2" v-if="!(otpRequested || resetPasswordEmailSent)">
+								<span class="text-p-base text-ink-gray-6">
 									{{
 										$route.name == 'Login'
 											? 'New member? '
@@ -315,7 +315,7 @@
 									}}
 								</span>
 								<router-link
-									class="text-base font-normal text-gray-900 underline hover:text-gray-700"
+									class="text-p-base text-ink-gray-9 underline hover:text-ink-gray-7"
 									:to="{
 										name: $route.name == 'Login' ? 'Signup' : 'Login',
 										query: { ...$route.query, forgot: undefined },
@@ -379,18 +379,18 @@
 						</form>
 						<div class="mt-4 space-y-2">
 							<div v-if="$route.name === 'Signup'">
-								<span class="text-base font-normal text-gray-600">
+								<span class="text-base font-normal text-ink-gray-6">
 									{{ 'By signing up, you agree to our ' }}
 								</span>
 								<a
-									class="text-base font-normal text-gray-900 underline hover:text-gray-700"
+									class="text-base font-normal text-ink-gray-9 underline hover:text-ink-gray-7"
 									href="https://frappecloud.com/policies"
 								>
 									Terms & Policies
 								</a>
 							</div>
 							<div>
-								<span class="text-base font-normal text-gray-600">
+								<span class="text-base font-normal text-ink-gray-6">
 									{{
 										$route.name == 'Login'
 											? 'New member? '
@@ -398,7 +398,7 @@
 									}}
 								</span>
 								<router-link
-									class="text-base font-normal text-gray-900 underline hover:text-gray-700"
+									class="text-base font-normal text-ink-gray-9 underline hover:text-ink-gray-7"
 									:to="{
 										name: $route.name == 'Login' ? 'Signup' : 'Login',
 										query: { ...$route.query, forgot: undefined },
@@ -412,7 +412,7 @@
 						</div>
 					</div>
 					<div
-						class="text-p-base text-gray-700"
+						class="text-p-base text-ink-gray-7"
 						v-else-if="resetPasswordEmailSent"
 					>
 						<p>
@@ -470,6 +470,11 @@ export default {
 	},
 	mounted() {
 		this.email = localStorage.getItem('login_email');
+		if (this.$route.name === 'Signup' && this.$route.query.product) {
+			this.$pulse?.capture('signup_viewed', {
+				product: this.$route.query.product,
+			});
+		}
 		if (window.posthog?.__loaded) {
 			window.posthog.identify(this.email || window.posthog.get_distinct_id(), {
 				app: 'frappe_cloud',
@@ -491,8 +496,8 @@ export default {
 						h(CustomToast, {
 							html: `
 							You are not part of an active team<br/>
-							<span class="text-sm text-gray-800">
-								If the issue persists, please contact 
+							<span class="text-sm text-ink-gray-8">
+								If the issue persists, please contact
 								<a href="https://support.frappe.io" class="font-medium underline" target="_blank" rel="noopener noreferrer">
 									support.
 								</a>
@@ -522,6 +527,7 @@ export default {
 					email: this.email,
 					referrer: this.getReferrerIfAny(),
 					product: this.$route.query.product,
+					aid: this.getAidIfAny(),
 				},
 				onSuccess(account_request) {
 					this.account_request = account_request;
@@ -723,7 +729,19 @@ export default {
 			} else if (this.hasForgotPassword) {
 				await this.checkTwoFactorAndResetPassword();
 			} else {
+				this.capturePulseSignupMethod('email');
 				this.$resources.signup.submit();
+			}
+		},
+		continueWithGoogle() {
+			this.capturePulseSignupMethod('google');
+			this.$resources.googleLogin.submit();
+		},
+		capturePulseSignupMethod(method) {
+			if (this.$route.name === 'Signup' && this.$route.query.product) {
+				this.$pulse?.capture(`signup_via_${method}`, {
+					product: this.$route.query.product,
+				});
 			}
 		},
 
@@ -795,6 +813,11 @@ export default {
 			const params = location.search;
 			const searchParams = new URLSearchParams(params);
 			return searchParams.get('referrer');
+		},
+		getAidIfAny() {
+			// Pulse anonymous id forwarded from the product website (?aid=…), so
+			// pre-signup browsing stitches to this account at team creation.
+			return new URLSearchParams(location.search).get('aid');
 		},
 		async login() {
 			await this.$session.login.submit(
@@ -910,7 +933,7 @@ export default {
 				return 'Log in to your account';
 			} else {
 				if (this.saasProduct) {
-					return `Sign up to create your ${this.saasProduct.title} site`;
+					return `Sign up for ${this.saasProduct.title}`;
 				}
 
 				return 'Create your Easytouch Cloud account';

@@ -130,8 +130,8 @@ def get_current_team(get_doc=False) -> Team | str:
 	# `team_name` getting injected by press.saas.api.whitelist_saas_api decorator
 	team = x_press_team if x_press_team else getattr(frappe.local, "team_name", "")
 
-	if not team and has_role("Press Admin") and frappe.db.exists("Team", {"user": frappe.session.user}):
-		# if user has_role of Press Admin then just return current user as default team
+	if not team and has_role("Press User") and frappe.db.exists("Team", {"user": frappe.session.user}):
+		# if user has_role of Press User then just return current user as default team
 		return (
 			frappe.get_doc("Team", {"user": frappe.session.user, "enabled": 1})
 			if get_doc
@@ -204,14 +204,41 @@ def get_default_team_for_user(user):
 	return None
 
 
+def chat_enabled():
+	if frappe.session.user == "Guest":
+		return False
+
+	if not frappe.db.get_single_value("Press Settings", "enable_chat"):
+		return False
+
+	current_team_doc = get_current_team(get_doc=True)
+
+	if not current_team_doc:
+		return False
+
+	date_diff = frappe.utils.data.get_datetime() - current_team_doc.creation
+
+	if date_diff < timedelta(days=90):
+		return True
+	return False
+
+
+def get_chat_bubble_config():
+	press_settings = frappe.get_doc("Press Settings")
+
+	return {"base_url": press_settings.chat_base_url, "website_token": press_settings.chat_website_token}
+
+
 def get_valid_teams_for_user(user):
 	teams = frappe.db.get_all("Team Member", filters={"user": user}, pluck="parent")
 	return frappe.db.get_all("Team", filters={"name": ("in", teams), "enabled": 1}, fields=["name", "user"])
 
 
 def is_user_part_of_team(user, team):
-	"""Returns True if user is part of the team"""
-	return frappe.db.exists("Team Member", {"parenttype": "Team", "parent": team, "user": user})
+	"""Returns True if user is the team owner or an explicit member of the team"""
+	if frappe.db.get_value("Team", team, "user") == user:
+		return True
+	return bool(frappe.db.exists("Team Member", {"parenttype": "Team", "parent": team, "user": user}))
 
 
 def get_country_info():
@@ -323,6 +350,13 @@ def is_allowed_access_performance_tuning():
 	return team.enable_performance_tuning
 
 
+def get_press_base_url():
+	press_url = frappe.conf.get("press_base_url") or frappe.utils.get_url()
+	if not press_url.startswith("http://") and not press_url.startswith("https://"):
+		press_url = "https://" + press_url
+	return press_url.rstrip("/")
+
+
 class RemoteFrappeSite:
 	def __init__(self, url, usr, pwd):
 		if not url.startswith("http"):
@@ -354,7 +388,9 @@ class RemoteFrappeSite:
 		res = requests.get(f"{self.user_site}/api/method/frappe.ping", timeout=(5, 10))
 
 		if not res.ok:
-			frappe.throw("Invalid Frappe Site")
+			frappe.throw(
+				"The Frappe site is invalid or unreachable. Please check the site URL and try again."
+			)
 
 		if res.json().get("message") == "pong":
 			# Get final redirect URL
@@ -370,7 +406,9 @@ class RemoteFrappeSite:
 		)
 		if not response.ok:
 			if response.status_code == 401:
-				frappe.throw("Invalid Credentials")
+				frappe.throw(
+					"The credentials are invalid. Please check the username and password and try again."
+				)
 			else:
 				response.raise_for_status()
 
@@ -540,16 +578,15 @@ def group_children_in_result(result, child_field_map):
 	result =
 	[
 	{'name': 'test1', 'full_name': 'Faris Ansari', role: 'System Manager'},
-	{'name': 'test1', 'full_name': 'Faris Ansari', role: 'Press Admin'},
-	{'name': 'test2', 'full_name': 'Aditya Hase', role: 'Press Admin'},
-	{'name': 'test2', 'full_name': 'Aditya Hase', role: 'Press Member'},
+	{'name': 'test1', 'full_name': 'Faris Ansari', role: 'Press User'},
+	{'name': 'test2', 'full_name': 'Aditya Hase', role: 'Press User'},
 	]
 
 	out = group_children_in_result(result, {'role': 'roles'})
 	print(out)
 	[
-	{'name': 'test1', 'full_name': 'Faris Ansari', roles: ['System Manager', 'Press Admin']},
-	{'name': 'test2', 'full_name': 'Aditya Hase', roles: ['Press Admin', 'Press Member']},
+	{'name': 'test1', 'full_name': 'Faris Ansari', roles: ['System Manager', 'Press User']},
+	{'name': 'test2', 'full_name': 'Aditya Hase', roles: ['Press User']},
 	]
 	"""
 	out = {}
@@ -944,7 +981,7 @@ def timer(f):
 def validate_subdomain(subdomain: str):
 	site_regex = r"^[a-z0-9][a-z0-9-]*[a-z0-9]$"
 	if not subdomain:
-		frappe.throw("Subdomain is required to create a site.")
+		frappe.throw("Please enter a subdomain to create the site.")
 	if not re.match(site_regex, subdomain):
 		frappe.throw("Subdomain contains invalid characters. Use lowercase characters, numbers and hyphens")
 	if len(subdomain) > 32:

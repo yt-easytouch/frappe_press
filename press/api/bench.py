@@ -15,9 +15,11 @@ from frappe.utils import flt, sbool
 from press.api.github import branches, get_access_token
 from press.api.site import protected
 from press.press.doctype.agent_job.agent_job import job_detail
+from press.press.doctype.app.app import get_app_from_policies
 from press.press.doctype.app_patch.app_patch import create_app_patch
 from press.press.doctype.bench_update.bench_update import get_bench_update
 from press.press.doctype.cluster.cluster import Cluster
+from press.press.doctype.deploy_candidate.deploy_candidate import RESTING_STATES, TRANSITORY_STATES
 from press.press.doctype.deploy_candidate_build.deploy_candidate_build import (
 	fail_and_redeploy as fail_and_redeploy_build,
 )
@@ -32,6 +34,7 @@ from press.press.doctype.release_group.release_group import (
 )
 from press.press.doctype.team.team import get_child_team_members
 from press.utils import (
+	docs,
 	get_app_tag,
 	get_client_blacklisted_keys,
 	get_current_team,
@@ -54,12 +57,14 @@ def new(bench):
 		frappe.throw("You cannot create a new bench because your account is disabled")
 
 	if exists(bench["title"]):
-		frappe.throw("A bench exists with the same name")
+		frappe.throw("A bench group with this name already exists. Please choose a different name.")
 
 	if bench["server"] and not (
 		frappe.session.data.user_type == "System User"
 		or frappe.db.get_value("Server", bench["server"], "team") == team.name
 	):
+		# Keep this message generic — do not reveal anything about servers the
+		# requesting team doesn't own, to avoid server enumeration.
 		frappe.throw("You can only create benches on your servers")
 
 	apps = [{"app": app["name"], "source": app["source"]} for app in bench["apps"]]
@@ -200,19 +205,9 @@ def exists(title):
 
 
 @frappe.whitelist()
-def get_default_apps():
-	press_settings = frappe.get_single("Press Settings")
-	default_apps = press_settings.get_default_apps()
-
-	versions, rows = get_app_versions_list()
-
-	version_based_default_apps = {v.version: [] for v in versions}
-
-	for app in default_apps:
-		for row in filter(lambda x: x.app == app, rows):
-			version_based_default_apps[row.version].append(row)
-
-	return version_based_default_apps
+def get_release_group_policy_for_bench(version: str):
+	"""Get the release group policy for a given version"""
+	return {"policies": get_app_from_policies(scope="Frappe Version", target=version, for_creation=True)}
 
 
 def get_app_versions_list(only_frappe=False):
@@ -285,7 +280,9 @@ def options():
 	clusters = Cluster.get_all_for_new_bench()
 
 	if not versions:
-		frappe.throw("Only enabled and public app sources will reflect here!")
+		frappe.throw(
+			f"Only enabled, public app sources appear here. To use a private app, add it to the bench from the Apps tab instead. {docs.doc_link(docs.CUSTOM_APP)}."
+		)
 
 	return {"versions": versions, "clusters": clusters}
 
@@ -395,7 +392,7 @@ def update_dependencies(name: str, dependencies: str):
 	rg: ReleaseGroup = frappe.get_doc("Release Group", name)
 
 	if len(rg.dependencies) != len(dependencies_dict):
-		frappe.throw("Need all required dependencies")
+		frappe.throw("Please provide a value for every dependency before saving.")
 
 	if diff := set([d["key"] for d in dependencies_dict]) - set(d.dependency for d in rg.dependencies):
 		frappe.throw("Invalid dependencies: " + ", ".join(diff))
@@ -491,7 +488,7 @@ def installable_apps(name):
 
 @frappe.whitelist()
 @protected("Release Group")
-def all_apps(name):
+def all_apps(name: str):
 	"""Return all apps in the marketplace that are not installed in the release group for adding new apps"""
 
 	release_group = frappe.get_doc("Release Group", name)
@@ -499,7 +496,7 @@ def all_apps(name):
 	marketplace_apps = frappe.get_all(
 		"Marketplace App",
 		filters={"status": "Published", "app": ("not in", installed_apps)},
-		fields=["name", "title", "image", "app"],
+		fields=["name", "title", "image", "app", "description"],
 	)
 
 	if not marketplace_apps:
@@ -529,13 +526,22 @@ def all_apps(name):
 	total_installs_by_app = get_total_installs_by_app()
 
 	for app in marketplace_apps:
-		app["sources"] = find_all(
-			list(filter(lambda x: x.version == release_group.version, marketplace_app_sources)),
-			lambda x: x.app == app.app,
-		)
+		public_app_sources = list(filter(lambda source: source.app == app.app, marketplace_app_sources))
+
+		if not public_app_sources:
+			app["no_public_releases"] = True
+
+		app["sources"] = list(
+			filter(lambda source: source.version == release_group.version, public_app_sources)
+		)  # will be empty if there are no public releases
+
 		# for fetching repo details for incompatible apps
-		app_source = find(marketplace_app_sources, lambda x: x.app == app.app)
-		app["repo"] = f"{app_source.repository_owner}/{app_source.repository}" if app_source else None
+		app["repo"] = (
+			f"{public_app_sources[0].repository_owner}/{public_app_sources[0].repository}"
+			if app["sources"]
+			else None
+		)
+
 		app["total_installs"] = total_installs_by_app.get(app["name"], 0)
 
 	return marketplace_apps
@@ -704,7 +710,8 @@ def candidates(filters=None, order_by=None, limit_start=None, limit_page_length=
 
 
 @frappe.whitelist()
-def candidate(name):
+@protected("Deploy Candidate")
+def candidate(name: str) -> dict | None:
 	if not name:
 		return None
 
@@ -759,7 +766,9 @@ def deploy(name, apps):
 		frappe.throw("Bench can only be deployed by the bench owner", exc=frappe.PermissionError)
 
 	if rg.deploy_in_progress:
-		frappe.throw("A deploy for this bench is already in progress")
+		frappe.throw(
+			f"A deploy for this bench is already in progress. Please wait for it to finish, or stop the current deploy, before starting another. {docs.doc_link(docs.UPDATE_BENCH)}."
+		)
 
 	candidate = rg.create_deploy_candidate(apps)
 	deploy_candidate_build = candidate.schedule_build_and_deploy()
@@ -775,7 +784,9 @@ def validate_app_hashes(apps: list[dict[str, str]]):
 	hashes = []
 	for app in apps:
 		if not app.get("release") or not app.get("hash"):
-			frappe.throw("Each app must have a release and hash to run deploy and update!")
+			frappe.throw(
+				"Every app needs a selected release before you can deploy or update. Please pick a version for each app and try again."
+			)
 		else:
 			hashes.append(app.get("hash"))
 
@@ -801,6 +812,7 @@ def deploy_and_update(
 	apps: list,
 	sites: list | None = None,
 	run_will_fail_check: bool = True,
+	trigger_patch_deploy: bool = False,
 ):
 	use_new_deploy_flow = frappe.db.get_single_value("Press Settings", "use_new_deploy_flow") or 0
 
@@ -813,7 +825,10 @@ def deploy_and_update(
 			apps,
 			sites,
 			False,
-		).deploy(run_will_fail_check)
+		).deploy(
+			run_will_fail_check,
+			trigger_patch_deploy=trigger_patch_deploy,
+		)
 
 	# We check permissions early on and don't change permissions in the middle of the Workflow
 	current_team = get_current_team()
@@ -827,9 +842,12 @@ def deploy_and_update(
 	)
 	release_pipeline.insert()
 	release_pipeline.create_release.run_as_workflow(
-		apps=apps, sites=sites, run_will_fail_check=run_will_fail_check
+		apps=apps,
+		sites=sites,
+		run_will_fail_check=run_will_fail_check,
+		trigger_patch_deploy=trigger_patch_deploy,
 	)
-	return None
+	return release_pipeline.name
 
 
 @frappe.whitelist()
@@ -1128,7 +1146,9 @@ def fail_build(dn: str):
 	failed = fail_remote_job(dn)
 
 	if not failed:
-		frappe.throw("No running job found!")
+		frappe.throw(
+			"There's no running build job to fail. It may have already finished or been stopped. Please refresh and check the build status."
+		)
 
 
 @frappe.whitelist()
@@ -1277,3 +1297,60 @@ def search_releases(
 	)
 
 	return q.run(as_dict=1)
+
+
+@frappe.whitelist()
+@protected("Release Group")
+def deploy_status(name: str) -> dict[str, bool | str | None]:
+	"""
+	Determine deployment state for a Release Group.
+
+	States:
+	- validating: pipeline exists, but no deploy candidate yet
+	- deploying: candidate exists and is in progress
+	- idle: no active pipeline or deployment finished
+	"""
+
+	ACTIVE_PIPELINE_STATUSES = ("Running", "Pending")
+
+	def response(is_validating=False, is_deploy_in_progress=False, candidate=None):
+		return {
+			"is_validating": is_validating,
+			"is_deploy_in_progress": is_deploy_in_progress,
+			"candidate": candidate,
+		}
+
+	pipeline_creation = frappe.db.get_value(
+		"Release Pipeline",
+		{
+			"release_group": name,
+			"status": ["in", ACTIVE_PIPELINE_STATUSES],
+		},
+		"creation",
+	)
+
+	if not pipeline_creation:
+		return response()
+
+	dc = frappe.db.get_value(
+		"Deploy Candidate Build",
+		{
+			"group": name,
+			"creation": (">", pipeline_creation),
+		},
+		["name", "status"],
+	)
+
+	if not dc:
+		return response(is_validating=True)
+
+	candidate, status = dc
+
+	# 3. Map status → UI state
+	if status in TRANSITORY_STATES:
+		return response(is_deploy_in_progress=True, candidate=candidate)
+
+	if status in RESTING_STATES:
+		return response()
+
+	return response(is_validating=True)

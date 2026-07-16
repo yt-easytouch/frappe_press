@@ -101,7 +101,7 @@ def callback(code: str | None = None, state: str | None = None):  # noqa: C901
 		email=email,
 		first_name=id_info.get("given_name"),
 		last_name=id_info.get("family_name"),
-		role="Press Admin",
+		role="Press User",
 		oauth_signup=True,
 		product_trial=product_trial.name if product_trial else None,
 	)
@@ -152,5 +152,7 @@ def get_google_credentials():
 
 	config = frappe.conf.get("google_credentials")
 	if not config:
-		frappe.throw("google_credentials not found in site_config.json")
+		frappe.throw(
+			"Google credentials are not configured. Please add 'google_credentials' to site_config.json before using this feature, or contact your administrator."
+		)
 	return config

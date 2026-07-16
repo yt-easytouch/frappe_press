@@ -7,6 +7,7 @@ import json
 import re
 import subprocess
 from datetime import datetime
+from ipaddress import ip_network
 from typing import TYPE_CHECKING, Any, Literal
 
 import frappe
@@ -23,14 +24,15 @@ from press.press.doctype.ansible_console.ansible_console import AnsibleAdHoc
 from press.press.doctype.database_server_mariadb_variable.database_server_mariadb_variable import (
 	DatabaseServerMariaDBVariable,
 )
-from press.press.doctype.server.server import PUBLIC_SERVER_AUTO_ADD_STORAGE_MIN, Agent, BaseServer
+from press.press.doctype.server.server import PUBLIC_SERVER_AUTO_ADD_STORAGE_MIN, Agent, BaseServer, Server
 from press.runner import Ansible
-from press.utils import log_error
+from press.utils import get_press_base_url, log_error
 from press.utils.database import find_db_disk_info, parse_du_output_of_mysql_directory
 from press.utils.jobs import has_job_timeout_exceeded
 
 if TYPE_CHECKING:
 	from press.press.doctype.agent_job.agent_job import AgentJob
+	from press.press.doctype.cluster.cluster import Cluster
 
 
 class DatabaseServer(BaseServer):
@@ -77,8 +79,12 @@ class DatabaseServer(BaseServer):
 		hostname: DF.Data
 		hostname_abbreviation: DF.Data | None
 		ip: DF.Data | None
+		is_auditd_setup: DF.Check
+		is_auto_coredump_enabled: DF.Check
 		is_binlog_indexer_running: DF.Check
+		is_external_healthcheck_enabled: DF.Check
 		is_for_recovery: DF.Check
+		is_mariadb_monitor_installed: DF.Check
 		is_monitoring_disabled: DF.Check
 		is_performance_schema_enabled: DF.Check
 		is_primary: DF.Check
@@ -89,7 +95,10 @@ class DatabaseServer(BaseServer):
 		is_server_renamed: DF.Check
 		is_server_setup: DF.Check
 		is_stalk_setup: DF.Check
+		is_static_ip: DF.Check
 		is_unified_server: DF.Check
+		is_wazuh_agent_installed: DF.Check
+		wazuh_agent_status: DF.Data | None
 		mariadb_root_password: DF.Password | None
 		mariadb_system_variables: DF.Table[DatabaseServerMariaDBVariable]
 		memory_allocator: DF.Literal["System", "jemalloc", "TCMalloc"]
@@ -125,6 +134,7 @@ class DatabaseServer(BaseServer):
 		stalk_variable: DF.Data | None
 		status: DF.Literal["Pending", "Installing", "Active", "Broken", "Archived"]
 		tags: DF.Table[ResourceTag]
+		tcmalloc_release_rate: DF.Int
 		team: DF.Link | None
 		title: DF.Data | None
 		tls_certificate_renewal_failed: DF.Check
@@ -180,7 +190,7 @@ class DatabaseServer(BaseServer):
 	def validate_physical_backup(self):
 		if self.is_unified_server and self.enable_physical_backup:
 			frappe.throw(
-				"Physical backup cannot be enabled for unified servers.",
+				"Physical backups aren't supported on unified servers. Please use logical backups instead, or move the database to a dedicated database server.",
 			)
 
 	def validate_mariadb_root_password(self):
@@ -226,11 +236,13 @@ class DatabaseServer(BaseServer):
 	def on_update(self):
 		self.publish_linked_server_realtime_update()
 
-		if self.flags.in_insert or self.is_new():
+		if self.flags.in_insert:
 			return
 
 		if self.is_replication_setup and self.auto_purge_binlog_based_on_size:
-			frappe.throw("Cannot enable binlog auto purge for replication configured servers")
+			frappe.throw(
+				"Binlog auto-purge can't be enabled while replication is set up, since replicas may still need those binlogs. Please disable replication first, or manage binlog retention manually."
+			)
 
 		self.update_mariadb_system_variables()
 		if (
@@ -240,7 +252,11 @@ class DatabaseServer(BaseServer):
 		):
 			self.update_memory_limits()
 
-		if not self.is_new() and self.has_value_changed("team"):
+		if not self.is_unified_server:
+			# this will be handled via the server doc for unified server
+			self._create_static_ip_log()
+
+		if self.has_value_changed("team"):
 			self.update_subscription()
 
 		if self.public:
@@ -547,7 +563,7 @@ class DatabaseServer(BaseServer):
 	def stop_mariadb(self):
 		frappe.enqueue_doc(self.doctype, self.name, "_stop_mariadb", timeout=1800)
 
-	def _stop_mariadb(self):
+	def _stop_mariadb(self, throw_on_failure: bool = False):
 		ansible = Ansible(
 			playbook="stop_mariadb.yml",
 			server=self,
@@ -558,8 +574,12 @@ class DatabaseServer(BaseServer):
 			},
 		)
 		play = ansible.run()
-		if play.status == "Failure":
+		if play.status != "Success":
 			log_error("MariaDB Stop Error", server=self.name)
+			if throw_on_failure:
+				frappe.throw(f"Failed to stop MariaDB on server: {self.name}")
+
+		return play
 
 	@frappe.whitelist()
 	def run_upgrade_mariadb_job(self):
@@ -568,7 +588,7 @@ class DatabaseServer(BaseServer):
 	def upgrade_mariadb(self):
 		frappe.enqueue_doc(self.doctype, self.name, "_upgrade_mariadb", timeout=1800)
 
-	def _upgrade_mariadb(self):
+	def _upgrade_mariadb(self, throw_on_failure: bool = False):
 		ansible = Ansible(
 			playbook="upgrade_mariadb.yml",
 			server=self,
@@ -579,8 +599,10 @@ class DatabaseServer(BaseServer):
 			},
 		)
 		play = ansible.run()
-		if play.status == "Failure":
+		if play.status != "Success":
 			log_error("MariaDB Upgrade Error", server=self.name)
+			if throw_on_failure:
+				frappe.throw(f"Failed to upgrade MariaDB on server: {self.name}")
 		return play
 
 	def _downgrade_mariadb_to_10_6(self):
@@ -662,7 +684,7 @@ class DatabaseServer(BaseServer):
 	):
 		"""Add or update MariaDB variable on the server"""
 		if not skip and not value:
-			frappe.throw("For non-skippable variables, value is mandatory")
+			frappe.throw("Please provide a value for this MariaDB variable, or mark it as skippable.")
 
 		self.flags.update_mariadb_system_variables_synchronously = update_variables_synchronously
 
@@ -750,10 +772,10 @@ class DatabaseServer(BaseServer):
 	def update_binlog_retention(self, days: str | int):
 		if isinstance(days, str):
 			if not days.isdigit():
-				frappe.throw("Binlog retention days must be a positive integer")
+				frappe.throw("Please enter the binlog retention as a whole number of days (for example 7).")
 			days = int(days)
 		if days < 1:
-			frappe.throw("Binlog retention days cannot be less than 1")
+			frappe.throw("Binlog retention must be at least 1 day. Please enter 1 or more.")
 
 		self.binlog_retention_days = days
 		# From MariaDB 10.6.1, expire_logs_days is alias of binlog_expire_logs_seconds
@@ -763,13 +785,15 @@ class DatabaseServer(BaseServer):
 	@dashboard_whitelist()
 	def update_binlog_size_limit(self, enabled: bool, percent_of_disk_size: int):
 		if self.is_part_of_replica:
-			frappe.throw("Cannot update binlog size limit for database replicas")
+			frappe.throw(
+				"The binlog size limit can't be changed on a database replica. Please update it on the primary database server instead."
+			)
 
 		if percent_of_disk_size is None:
 			percent_of_disk_size = 0
 		if enabled:
 			if percent_of_disk_size < 10 or percent_of_disk_size > 90:
-				frappe.throw("Percent of disk space  must be between 10 and 90")
+				frappe.throw("Please enter a disk usage percentage between 10 and 90.")
 			self.binlog_max_disk_usage_percent = percent_of_disk_size
 			self.auto_purge_binlog_based_on_size = True
 		else:
@@ -786,13 +810,18 @@ class DatabaseServer(BaseServer):
 				f"Max Connections cannot be greater than {max_possible_connections}. If you need more connections, please increase memory of database server."
 			)
 		if max_connections < 10:
-			frappe.throw("Max Connections cannot be less than 10")
+			frappe.throw("Max connections must be at least 10. Please enter 10 or more.")
 
 		self.add_or_update_mariadb_variable("max_connections", "value_str", str(max_connections), save=True)
 
 	def validate_server_id(self):
 		if self.is_new() and not self.server_id:
-			server_ids = frappe.get_all("Database Server", fields=["server_id"], pluck="server_id")
+			server_ids = frappe.get_all(
+				"Database Server",
+				filters={"is_unified_server": self.is_unified_server},
+				fields=["server_id"],
+				pluck="server_id",
+			)
 			if server_ids:
 				self.server_id = max(server_ids or []) + 1
 			else:
@@ -800,6 +829,8 @@ class DatabaseServer(BaseServer):
 
 	def _setup_server(self):
 		config = self._get_config()
+
+		cluster: Cluster = frappe.get_doc("Cluster", self.cluster)
 
 		try:
 			ansible = Ansible(
@@ -827,6 +858,12 @@ class DatabaseServer(BaseServer):
 					"certificate_intermediate_chain": config.certificate.intermediate_chain,
 					"mariadb_depends_on_mounts": self.mariadb_depends_on_mounts,
 					"nat_gateway_ip": self.get_nat_gateway_ip(),
+					"cloud_provider": self.provider,
+					"network_gateway": (
+						str(ip_network(cluster.cidr_block).network_address + 1)
+						if self.provider == "Hetzner" and cluster.cidr_block
+						else ""
+					),
 					**self.get_mount_variables(),
 				},
 			)
@@ -836,6 +873,7 @@ class DatabaseServer(BaseServer):
 			if play.status == "Success":
 				self.status = "Active"
 				self.is_server_setup = True
+				self.set_auditd_setup_from_base_playbook()
 				self.process_hybrid_server_setup()
 				if self.provider == "DigitalOcean":
 					# Adjusting docker permissions
@@ -1017,6 +1055,9 @@ class DatabaseServer(BaseServer):
 			if play.status == "Success":
 				self.status = "Active"
 				self.is_replication_setup = True
+				# A replication-configured server must not auto purge binlogs by size
+				# (enforced in on_update). New DB servers default it on, so disable it.
+				self.auto_purge_binlog_based_on_size = False
 				self.mariadb_root_password = mariadb_root_password
 			else:
 				self.status = "Broken"
@@ -1252,7 +1293,7 @@ class DatabaseServer(BaseServer):
 			self.doctype, self.name, "_prepare_mariadb_replica", queue="long", timeout=1200, at_front=True
 		)
 
-	def _prepare_mariadb_replica(self):
+	def _prepare_mariadb_replica(self, throw_on_failure: bool = False):
 		if self.is_primary:
 			return
 
@@ -1271,13 +1312,25 @@ class DatabaseServer(BaseServer):
 					"mariadb_server_id": self.server_id,
 				},
 			)
-			ansible.run()
+			play = ansible.run()
+			if play.status != "Success":
+				raise Exception("Failed to prepare MariaDB replica")
 		except Exception:
+			if throw_on_failure:
+				raise
+
 			log_error("MariaDB Prepare Replica Exception", server=self.as_dict())
 
 	def configure_replication(self, gtid_slave_pos: str | None = None):
 		if self.is_primary:
 			return
+
+		# Provisioning steps run as separate jobs. The preceding Prepare step leaves
+		# MariaDB running, but a retry of Configure in isolation could hit a stopped
+		# server and fail with a connection-refused deep in the agent. Make sure it is
+		# up before issuing replication commands (restart_mysql.yml uses a Type=notify
+		# unit, so it returns only once MariaDB accepts connections).
+		self._restart_mariadb()
 
 		primary_db: "DatabaseServer" = frappe.get_doc("Database Server", self.primary)
 
@@ -1292,6 +1345,10 @@ class DatabaseServer(BaseServer):
 
 		if not self.is_replication_setup:
 			self.is_replication_setup = True
+			# New DB servers default binlog auto purge on, but a replication-configured
+			# server must not auto purge binlogs by size (enforced in on_update). Disable
+			# it as the server becomes a replica.
+			self.auto_purge_binlog_based_on_size = False
 			self.save()
 
 	def reset_replication(self):
@@ -1674,7 +1731,9 @@ class DatabaseServer(BaseServer):
 	def set_innodb_force_recovery(self, value: int):
 		"""Set innodb_force_recovery to the given value"""
 		if value < 0 or value > 6:
-			frappe.throw("innodb_force_recovery value must be between 0 and 6")
+			frappe.throw(
+				"innodb_force_recovery must be between 0 and 6. Please enter a value in that range (use the lowest value that lets the database start)."
+			)
 		self.add_or_update_mariadb_variable(
 			"innodb_force_recovery", "value_str", str(value), skip=False, persist=True, save=True
 		)
@@ -1739,16 +1798,27 @@ class DatabaseServer(BaseServer):
 			log_error("Database Server MariaDB Exporter Reconfigure Exception", server=self.as_dict())
 
 	@frappe.whitelist()
-	def update_memory_allocator(self, memory_allocator):
+	def update_memory_allocator(self, memory_allocator: str, tcmalloc_release_rate: int | None = None):
+		if memory_allocator == "tcmalloc":
+			tcmalloc_release_rate = tcmalloc_release_rate or 1
+
+		if (
+			memory_allocator == "tcmalloc"
+			and tcmalloc_release_rate
+			and (tcmalloc_release_rate > 10 or tcmalloc_release_rate < 1)
+		):
+			frappe.throw("tcmalloc_release_rate must be between 1 and 10")  # nosemgrep
+
 		frappe.enqueue_doc(
 			self.doctype,
 			self.name,
 			"_update_memory_allocator",
 			memory_allocator=memory_allocator,
+			tcmalloc_release_rate=tcmalloc_release_rate,
 			enqueue_after_commit=True,
 		)
 
-	def _update_memory_allocator(self, memory_allocator):
+	def _update_memory_allocator(self, memory_allocator: str, tcmalloc_release_rate: int | None = None):
 		ansible = Ansible(
 			playbook="mariadb_memory_allocator.yml",
 			server=self,
@@ -1757,6 +1827,7 @@ class DatabaseServer(BaseServer):
 			variables={
 				"server": self.name,
 				"allocator": memory_allocator.lower(),
+				"tcmalloc_release_rate": tcmalloc_release_rate or 1,
 				"mariadb_root_password": self.get_password("mariadb_root_password"),
 			},
 		)
@@ -1776,9 +1847,18 @@ class DatabaseServer(BaseServer):
 			query_result = result.get("query_result")
 			if query_result:
 				self.reload()
-				self.memory_allocator = memory_allocator
+				self.memory_allocator = self._get_memory_allocator_display_name(query_result[0][0]["Value"])
 				self.memory_allocator_version = query_result[0][0]["Value"]
-				self.save()
+
+			self.tcmalloc_release_rate = tcmalloc_release_rate
+			self.save()
+
+	def _get_memory_allocator_display_name(self, allocator_version):
+		if "jemalloc" in allocator_version.lower():
+			return "jemalloc"
+		if "tcmalloc" in allocator_version.lower():
+			return "TCMalloc"
+		return "System"
 
 	@dashboard_whitelist()
 	def get_mariadb_variables(self):
@@ -1840,7 +1920,9 @@ Latest binlog : {latest_binlog.get("name", "")} - {last_binlog_size_mb} MB {last
 	@dashboard_whitelist()
 	def get_binlogs_indexing_status(self):
 		if not self.enable_binlog_indexing:
-			frappe.throw("Binlog Indexing is not enabled for this server.")
+			frappe.throw(
+				"Binlog indexing isn't enabled for this server. Please enable binlog indexing in the server settings before using this feature."
+			)
 
 		data = frappe.db.get_all(
 			"MariaDB Binlog",
@@ -1893,7 +1975,7 @@ Latest binlog : {latest_binlog.get("name", "")} - {last_binlog_size_mb} MB {last
 			frappe.throw("The server has replication setup. Binlogs cannot be purged forcefully.")
 
 		if not no_of_binlogs or not isinstance(no_of_binlogs, int) or no_of_binlogs < 0:
-			frappe.throw("No of Binlogs are invalid")
+			frappe.throw("Please enter the number of binlogs to purge as a positive whole number.")
 
 		proxy = frappe.db.get_value("Proxy Server", {"status": "Active", "cluster": self.cluster}, "name")
 
@@ -2187,10 +2269,14 @@ systemctl restart mariadb
 			return None
 
 		if not self.enable_binlog_indexing:
-			frappe.throw("Binlog Indexing is not enabled for this server.")
+			frappe.throw(
+				"Binlog indexing isn't enabled for this server. Please enable binlog indexing in the server settings before using this feature."
+			)
 
 		if self._is_binlog_indexing_related_operation_running() or self.is_binlog_indexer_running:
-			frappe.throw("Another Binlog Indexing related operation is already in progress.")
+			frappe.throw(
+				"Another binlog indexing operation is already running on this server. Please wait for it to finish before starting another."
+			)
 
 		job = self.agent.add_binlogs_to_indexer(binlog_file_names)
 		return job.name
@@ -2430,6 +2516,68 @@ systemctl restart mariadb
 	@frappe.whitelist()
 	def flush_tables(self):
 		self.agent.database_flush_tables()
+
+	@frappe.whitelist()
+	def setup_mariadb_monitor(self):
+		frappe.enqueue_doc(self.doctype, self.name, "_setup_mariadb_monitor", timeout=1800, queue="long")
+
+	def _setup_mariadb_monitor(self):
+		app_servers = frappe.get_all(
+			"Server",
+			filters={"status": ("!=", "Archived"), "database_server": self.name},
+			pluck="name",
+			limit=1,
+		)
+		if not app_servers:
+			return
+
+		app_server: Server = frappe.get_doc("Server", app_servers[0])
+		try:
+			ansible = Ansible(
+				playbook="install_mariadb_monitor.yml",
+				server=self,
+				user=self._ssh_user(),
+				port=self._ssh_port(),
+				variables={
+					"server_name": self.name,
+					"enable_external_healthcheck": self.is_external_healthcheck_enabled,
+					"external_health_check_token": app_server.get_db_healthcheck_token(),
+					"external_health_check_url": frappe.utils.get_url(
+						get_press_base_url() + "/api/method/press.api.service_health.check_db_health"
+					),
+					"enable_coredump": self.is_auto_coredump_enabled,
+					"mariadb_root_password": self.get_password("mariadb_root_password"),
+					"mariadb_private_ip": self.private_ip,
+				},
+			)
+			play = ansible.run()
+			if play.status == "Success":
+				self.is_mariadb_monitor_installed = True
+				self.save()
+		except Exception:
+			log_error("Database Server MariaDB Monitor Install Exception", server=self.as_dict())
+
+	@frappe.whitelist()
+	def uninstall_mariadb_monitor(self):
+		frappe.enqueue_doc(self.doctype, self.name, "_uninstall_mariadb_monitor", timeout=1800, queue="long")
+
+	def _uninstall_mariadb_monitor(self):
+		if not self.is_mariadb_monitor_installed:
+			return
+		try:
+			ansible = Ansible(
+				playbook="uninstall_mariadb_monitor.yml",
+				server=self,
+				user=self._ssh_user(),
+				port=self._ssh_port(),
+			)
+			play = ansible.run()
+
+			if play.status == "Success":
+				self.is_mariadb_monitor_installed = False
+				self.save()
+		except Exception:
+			log_error("Database Server MariaDB Monitor Uninstall Exception", server=self.as_dict())
 
 
 get_permission_query_conditions = get_permission_query_conditions_for_doctype("Database Server")

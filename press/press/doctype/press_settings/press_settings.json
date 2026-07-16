@@ -20,6 +20,10 @@
     "column_break_wrqp",
     "usage_record_creation_batch_size",
     "default_server_plan_type",
+    "plans_section",
+    "default_dedicated_server_site_warranty_change_cooldown",
+    "column_break_vllh",
+    "default_dedicated_server_site_warranty_quota",
     "invoicing_section",
     "invoicing_column",
     "gst_percentage",
@@ -58,6 +62,10 @@
     "frappeio_api_key",
     "column_break_39",
     "frappeio_api_secret",
+    "pulse_section",
+    "pulse_site",
+    "column_break_whfe",
+    "pulse_api_key",
     "backups_tab",
     "offsite_backups_section",
     "backup_region",
@@ -108,11 +116,13 @@
     "compress_app_cache",
     "use_delta_builds",
     "use_agent_job_callbacks",
+    "allow_patch_builds",
     "auto_update_section",
     "auto_update_queue_size",
     "remote_files_section",
     "remote_uploads_bucket",
     "remote_link_expiry",
+    "region_name",
     "column_break_51",
     "remote_access_key_id",
     "remote_secret_access_key",
@@ -137,6 +147,7 @@
     "standby_pool_size",
     "column_break_95",
     "standby_queue_size",
+    "cleanup_standby_site_pool",
     "integrations_tab",
     "telegram_section",
     "telegram_chat_id",
@@ -166,6 +177,10 @@
     "aws_access_key_id",
     "column_break_agig",
     "aws_secret_access_key",
+    "hetzner_section",
+    "hetzner_vcpu_limit",
+    "column_break_hetzner",
+    "hetzner_server_limit",
     "twilio_section",
     "twilio_account_sid",
     "twilio_api_key_sid",
@@ -178,6 +193,13 @@
     "column_break_xhfy",
     "spamd_api_key",
     "spamd_api_secret",
+    "chatwoot_section",
+    "enable_chat",
+    "chat_base_url",
+    "chat_website_token",
+    "column_break_srse",
+    "chat_support_start_time",
+    "chat_support_end_time",
     "marketplace_tab",
     "marketplace_settings_section",
     "max_allowed_screenshots",
@@ -221,6 +243,7 @@
     "send_telegram_notifications",
     "column_break_jlzi",
     "log_server",
+    "anthropic_api_key",
     "telegram_alert_chat_id",
     "telegram_alerts_chat_group",
     "send_email_notifications",
@@ -236,6 +259,7 @@
     "realtime_job_updates",
     "disable_agent_job_deduplication",
     "disable_binlog_indexer_service",
+    "enable_mcp",
     "column_break_rdlr",
     "disable_auto_retry",
     "disallow_disposable_emails",
@@ -243,6 +267,7 @@
     "execute_incident_action",
     "enable_server_snapshot_recovery",
     "use_new_deploy_flow",
+    "auto_upgrade_dependencies",
     "section_break_jstu",
     "enable_app_grouping",
     "default_apps",
@@ -265,7 +290,13 @@
     "code_spaces_tab",
     "spaces_domain",
     "security_tab",
-    "wazuh_server"
+    "wazuh_server",
+    "wazuh_api_url",
+    "wazuh_api_username",
+    "wazuh_api_password",
+    "wazuh_api_verify_tls",
+    "dashboard_tab",
+    "latest_blog_url"
   ],
   "fields": [
     {
@@ -1707,6 +1738,172 @@
       "fieldname": "new_bench_concurrency_limit",
       "fieldtype": "Int",
       "label": "New Bench Concurrency Limit"
+    },
+    {
+      "fieldname": "plans_section",
+      "fieldtype": "Section Break",
+      "label": "Plans"
+    },
+    {
+      "default": "30",
+      "description": "Default number of days before the site warranty setting can be changed for newly created dedicated servers",
+      "fieldname": "default_dedicated_server_site_warranty_change_cooldown",
+      "fieldtype": "Int",
+      "label": "Default Dedicated Server Site Warranty Change Cooldown"
+    },
+    {
+      "fieldname": "column_break_vllh",
+      "fieldtype": "Column Break"
+    },
+    {
+      "default": "5",
+      "description": "Default max number of sites with product warranty for newly created dedicated servers",
+      "fieldname": "default_dedicated_server_site_warranty_quota",
+      "fieldtype": "Int",
+      "label": "Default Dedicated Server Supported Site Quota"
+    },
+    {
+      "fieldname": "pulse_section",
+      "fieldtype": "Section Break",
+      "label": "Pulse"
+    },
+    {
+      "fieldname": "pulse_site",
+      "fieldtype": "Data",
+      "label": "Pulse Site"
+    },
+    {
+      "fieldname": "column_break_whfe",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "pulse_api_key",
+      "fieldtype": "Data",
+      "label": "Pulse API Key"
+    },
+    {
+      "fieldname": "allow_patch_builds",
+      "fieldtype": "Check",
+      "label": "Allow Patch Builds"
+    },
+    {
+      "fieldname": "region_name",
+      "fieldtype": "Data",
+      "label": "Region Name"
+    },
+    {
+      "default": "0",
+      "description": "Master switch for draining Product Trial standby pools. Each product must also opt in via its own \"Clean Up Pool\" checkbox.",
+      "fieldname": "cleanup_standby_site_pool",
+      "fieldtype": "Check",
+      "label": "Clean Standby Site Pool"
+    },
+    {
+      "fieldname": "hetzner_section",
+      "fieldtype": "Section Break",
+      "label": "Hetzner"
+    },
+    {
+      "fieldname": "hetzner_vcpu_limit",
+      "fieldtype": "Int",
+      "label": "Hetzner vCPU Limit"
+    },
+    {
+      "fieldname": "column_break_hetzner",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "hetzner_server_limit",
+      "fieldtype": "Int",
+      "label": "Hetzner Server Limit"
+    },
+    {
+      "fieldname": "chatwoot_section",
+      "fieldtype": "Section Break",
+      "label": "Chat Support"
+    },
+    {
+      "default": "0",
+      "fieldname": "enable_chat",
+      "fieldtype": "Check",
+      "label": "Enable Chat"
+    },
+    {
+      "fieldname": "chat_base_url",
+      "fieldtype": "Data",
+      "label": "Chat Base URL"
+    },
+    {
+      "fieldname": "chat_website_token",
+      "fieldtype": "Data",
+      "label": "Chat Website Token"
+    },
+    {
+      "fieldname": "column_break_srse",
+      "fieldtype": "Column Break"
+    },
+    {
+      "default": "10",
+      "fieldname": "chat_support_start_time",
+      "fieldtype": "Select",
+      "label": "Chat Support Start Time",
+      "options": "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23"
+    },
+    {
+      "default": "18",
+      "fieldname": "chat_support_end_time",
+      "fieldtype": "Select",
+      "label": "Chat Support End Time",
+      "options": "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24"
+    },
+    {
+      "fieldname": "anthropic_api_key",
+      "fieldtype": "Password",
+      "label": "Anthropic API Key"
+    },
+    {
+      "default": "0",
+      "fieldname": "enable_mcp",
+      "fieldtype": "Check",
+      "label": "Enable MCP"
+    },
+    {
+      "default": "0",
+      "fieldname": "auto_upgrade_dependencies",
+      "fieldtype": "Check",
+      "label": "Auto Upgrade Dependencies"
+    },
+    {
+      "fieldname": "wazuh_api_url",
+      "fieldtype": "Data",
+      "label": "Wazuh API URL"
+    },
+    {
+      "fieldname": "wazuh_api_username",
+      "fieldtype": "Data",
+      "label": "Wazuh API Username"
+    },
+    {
+      "fieldname": "wazuh_api_password",
+      "fieldtype": "Password",
+      "label": "Wazuh API Password"
+    },
+    {
+      "default": "1",
+      "fieldname": "wazuh_api_verify_tls",
+      "fieldtype": "Check",
+      "label": "Wazuh API Verify TLS"
+    },
+    {
+      "fieldname": "dashboard_tab",
+      "fieldtype": "Tab Break",
+      "label": "Dashboard"
+    },
+    {
+      "description": "URL of the latest blog post shown in the dashboard sidebar widget",
+      "fieldname": "latest_blog_url",
+      "fieldtype": "Data",
+      "label": "Latest Blog URL"
     }
   ],
   "issingle": 1,

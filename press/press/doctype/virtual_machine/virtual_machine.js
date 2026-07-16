@@ -21,7 +21,7 @@ frappe.ui.form.on('Virtual Machine', {
 			frm.set_df_property('assign_public_ip', 'hidden', 1);
 		}
 
-		[
+		;[
 			[__('Sync'), 'sync', false, frm.doc.status != 'Draft'],
 			[__('Provision'), 'provision', true, frm.doc.status == 'Draft'],
 			[__('Reboot'), 'reboot', true, frm.doc.status == 'Running'],
@@ -117,7 +117,9 @@ frappe.ui.form.on('Virtual Machine', {
 				'disassociate_auto_assigned_public_ip',
 				true,
 				frm.doc.status === 'Running' &&
-					frm.doc.cloud_provider === 'AWS EC2' &&
+					['AWS EC2', 'Frappe Compute', 'OCI'].includes(
+						frm.doc.cloud_provider,
+					) &&
 					!!frm.doc.public_ip_address &&
 					!frm.doc.is_static_ip,
 			],
@@ -132,27 +134,27 @@ frappe.ui.form.on('Virtual Machine', {
 								() =>
 									frm.call(method).then((r) => {
 										if (r.message) {
-											frappe.msgprint(r.message);
+											frappe.msgprint(r.message)
 										} else {
-											frm.refresh();
+											frm.refresh()
 										}
 									}),
-							);
+							)
 						} else {
 							frm.call(method).then((r) => {
 								if (r.message) {
-									frappe.msgprint(r.message);
+									frappe.msgprint(r.message)
 								} else {
-									frm.refresh();
+									frm.refresh()
 								}
-							});
+							})
 						}
 					},
 					__('Actions'),
-				);
+				)
 			}
-		});
-		[
+		})
+		;[
 			[
 				__('Resize'),
 				'resize',
@@ -168,14 +170,14 @@ frappe.ui.form.on('Virtual Machine', {
 						fieldname: 'machine_type',
 						reqd: 1,
 					},
-				];
+				]
 				if (frm.doc.cloud_provider == 'Hetzner') {
 					fields.push({
 						fieldtype: 'Check',
 						label: 'Upgrade Disk ?',
 						fieldname: 'upgrade_disk',
 						default: 0,
-					});
+					})
 				}
 				frm.add_custom_button(
 					label,
@@ -188,16 +190,16 @@ frappe.ui.form.on('Virtual Machine', {
 										machine_type,
 										upgrade_disk,
 									})
-									.then((r) => frm.refresh());
+									.then((r) => frm.refresh())
 							},
 							__('Resize Virtual Machine'),
-						);
+						)
 					},
 					__('Actions'),
-				);
+				)
 			}
-		});
-		[
+		})
+		;[
 			[
 				__('Update OCI Volume Performance'),
 				'update_oci_volume_performance',
@@ -225,16 +227,16 @@ frappe.ui.form.on('Virtual Machine', {
 									.call(method, {
 										vpus,
 									})
-									.then((r) => frm.refresh());
+									.then((r) => frm.refresh())
 							},
 							__('Update OCI Volume Performance'),
-						);
+						)
 					},
 					__('Actions'),
-				);
+				)
 			}
-		});
-		[
+		})
+		;[
 			[
 				__('Convert to ARM'),
 				'convert_to_arm',
@@ -261,7 +263,7 @@ frappe.ui.form.on('Virtual Machine', {
 												status: 'Available',
 												series: frm.doc.series,
 											},
-										};
+										}
 									},
 								},
 								{
@@ -277,15 +279,15 @@ frappe.ui.form.on('Virtual Machine', {
 										virtual_machine_image,
 										machine_type,
 									})
-									.then((r) => frm.refresh());
+									.then((r) => frm.refresh())
 							},
 							__(label),
-						);
+						)
 					},
 					__('Actions'),
-				);
+				)
 			}
-		});
+		})
 		if (frm.doc.platform == 'x86_64') {
 			frm.add_custom_button(
 				'Convert to AMD',
@@ -306,7 +308,7 @@ frappe.ui.form.on('Virtual Machine', {
 											status: 'Available',
 											series: frm.doc.series,
 										},
-									};
+									}
 								},
 							},
 							{
@@ -322,13 +324,13 @@ frappe.ui.form.on('Virtual Machine', {
 									virtual_machine_image,
 									machine_type,
 								})
-								.then((r) => frm.refresh());
+								.then((r) => frm.refresh())
 						},
 						__('Convert to AMD'),
-					);
+					)
 				},
 				__('Actions'),
-			);
+			)
 		}
 		if (frm.doc.status == 'Running') {
 			frm.add_custom_button(
@@ -365,13 +367,13 @@ frappe.ui.form.on('Virtual Machine', {
 									iops,
 									throughput,
 								})
-								.then((r) => frm.refresh());
+								.then((r) => frm.refresh())
 						},
 						__('Attach New Volume'),
-					);
+					)
 				},
 				__('Actions'),
-			);
+			)
 
 			frm.add_custom_button(
 				'Attach Volume',
@@ -397,25 +399,25 @@ frappe.ui.form.on('Virtual Machine', {
 									volume_id,
 									is_temporary_volume,
 								})
-								.then((r) => frm.refresh());
+								.then((r) => frm.refresh())
 						},
 						__('Attach Volume'),
-					);
+					)
 				},
 				__('Actions'),
-			);
+			)
 		}
 		if (frm.doc.instance_id) {
 			if (frm.doc.cloud_provider === 'AWS EC2') {
 				frm.add_web_link(
 					`https://${frm.doc.region}.console.aws.amazon.com/ec2/v2/home?region=${frm.doc.region}#InstanceDetails:instanceId=${frm.doc.instance_id}`,
 					__('Visit AWS Dashboard'),
-				);
+				)
 			} else if (frm.doc.cloud_provider === 'OCI') {
 				frm.add_web_link(
 					`https://cloud.oracle.com/compute/instances/${frm.doc.instance_id}?region=${frm.doc.region}`,
 					__('Visit OCI Dashboard'),
-				);
+				)
 			}
 		}
 	},
@@ -431,14 +433,14 @@ frappe.ui.form.on('Virtual Machine', {
 				)
 				.then((r) => {
 					if (r.message && r.message.disable_public_ips_for_servers) {
-						frm.set_value('assign_public_ip', 0);
+						frm.set_value('assign_public_ip', 0)
 					} else {
-						frm.set_value('assign_public_ip', 1);
+						frm.set_value('assign_public_ip', 1)
 					}
-				});
+				})
 		}
 	},
-});
+})
 
 frappe.ui.form.on('Virtual Machine Volume', {
 	toggle_rightsize(frm, cdt, cdn) {
@@ -447,31 +449,31 @@ frappe.ui.form.on('Virtual Machine Volume', {
 			cdn,
 			'skip_rightsize',
 			!frm.selected_doc.skip_rightsize,
-		);
-		frm.save();
+		)
+		frm.save()
 	},
 	detach(frm, cdt, cdn) {
-		let row = frm.selected_doc;
+		let row = frm.selected_doc
 		frappe.confirm(
 			`Are you sure you want to detach volume ${row.volume_id}?`,
 			() =>
 				frm
 					.call('detach', { volume_id: row.volume_id })
 					.then((r) => frm.refresh()),
-		);
+		)
 	},
 	delete_volume(frm, cdt, cdn) {
-		let row = frm.selected_doc;
+		let row = frm.selected_doc
 		frappe.confirm(
 			`Are you sure you want to delete volume ${row.volume_id}?`,
 			() =>
 				frm
 					.call('delete_volume', { volume_id: row.volume_id })
 					.then((r) => frm.refresh()),
-		);
+		)
 	},
 	increase_disk_size(frm, cdt, cdn) {
-		let row = frm.selected_doc;
+		let row = frm.selected_doc
 		frappe.prompt(
 			{
 				fieldtype: 'Int',
@@ -485,13 +487,13 @@ frappe.ui.form.on('Virtual Machine Volume', {
 						volume_id: row.volume_id,
 						increment,
 					})
-					.then((r) => frm.refresh());
+					.then((r) => frm.refresh())
 			},
 			__('Increase Disk Size'),
-		);
+		)
 	},
 	update_ebs_performance(frm, cdt, cdn) {
-		let row = frm.selected_doc;
+		let row = frm.selected_doc
 		frappe.prompt(
 			[
 				{
@@ -516,9 +518,9 @@ frappe.ui.form.on('Virtual Machine Volume', {
 						iops,
 						throughput,
 					})
-					.then((r) => frm.refresh());
+					.then((r) => frm.refresh())
 			},
 			__('Update EBS Performance'),
-		);
+		)
 	},
-});
+})

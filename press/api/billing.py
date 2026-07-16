@@ -38,8 +38,7 @@ from press.utils.billing import (
 	validate_gstin_check_digit,
 )
 from press.utils.mpesa_utils import create_mpesa_request_log
-
-# from press.press.doctype.paymob_callback_log.paymob_callback_log import create_payment_partner_transaction
+from press.utils.telemetry import capture_pulse
 
 
 @frappe.whitelist()
@@ -75,6 +74,60 @@ def upcoming_invoice():
 def get_balance_credit():
 	team = get_current_team(True)
 	return team.get_balance()
+
+
+@frappe.whitelist()
+@role_guard.api("billing")
+def subscriptions():
+	"""Active subscriptions owned by the current team, grouped by type, for the
+	billing Subscriptions tab: sites, servers, and marketplace apps (with the
+	sites each app is installed on)."""
+	team = get_current_team()
+
+	rows = frappe.get_all(
+		"Subscription",
+		filters={
+			"team": team,
+			"enabled": 1,
+			"document_type": ("in", ["Site", "Server"]),
+		},
+		fields=["document_type", "document_name", "plan"],
+		order_by="document_name asc",
+	)
+	sites = [{"name": r.document_name, "plan": r.plan} for r in rows if r.document_type == "Site"]
+	servers = [{"name": r.document_name, "plan": r.plan} for r in rows if r.document_type == "Server"]
+
+	app_rows = frappe.get_all(
+		"Marketplace App Subscription",
+		filters={"team": team, "status": "Active"},
+		fields=["app", "plan", "site"],
+		order_by="app asc",
+	)
+	apps_by_name: dict[str, dict] = {}
+	for row in app_rows:
+		app = apps_by_name.setdefault(
+			row.app,
+			{"name": row.app, "title": None, "plan": row.plan, "sites": []},
+		)
+		if row.site:
+			app["sites"].append(row.site)
+
+	titles = dict(
+		frappe.get_all(
+			"Marketplace App",
+			filters={"name": ("in", list(apps_by_name))},
+			fields=["name", "title"],
+			as_list=True,
+		)
+	)
+	for name, app in apps_by_name.items():
+		app["title"] = titles.get(name) or name
+
+	return {
+		"sites": sites,
+		"servers": servers,
+		"marketplace_apps": list(apps_by_name.values()),
+	}
 
 
 @frappe.whitelist()
@@ -271,6 +324,11 @@ def create_payment_intent_for_micro_debit():
 		metadata={
 			"payment_for": "micro_debit_test_charge",
 		},
+		payment_method_options={
+			"card": {
+				"request_three_d_secure": "any" if team.is_trusted_team else "automatic",
+			}
+		},
 	)
 	return {"client_secret": intent["client_secret"]}
 
@@ -300,69 +358,25 @@ def create_payment_intent_for_buying_credits(amount):
 		customer=team.stripe_customer_id,
 		description="Prepaid Credits",
 		metadata=metadata,
+		payment_method_options={
+			"card": {
+				"request_three_d_secure": "any" if team.is_trusted_team else "automatic",
+			}
+		},
+	)
+	capture_pulse(
+		"prepaid_credits_purchase_attempted",
+		{
+			"team": team.name,
+			"amount": amount,
+			"currency": team.currency,
+			"intent_id": intent["id"],
+		},
 	)
 	return {
 		"client_secret": intent["client_secret"],
 		"publishable_key": get_publishable_key(),
 	}
-
-
-@frappe.whitelist()
-@role_guard.api("billing")
-def create_payment_intent_for_prepaid_app(amount, metadata):
-	stripe = get_stripe()
-	team = get_current_team(True)
-	payment_method = frappe.get_value(
-		"Stripe Payment Method", team.default_payment_method, "stripe_payment_method_id"
-	)
-	try:
-		if not payment_method:
-			intent = stripe.PaymentIntent.create(
-				amount=amount * 100,
-				currency=team.currency.lower(),
-				customer=team.stripe_customer_id,
-				description="Prepaid App Purchase",
-				metadata=metadata,
-			)
-		else:
-			intent = stripe.PaymentIntent.create(
-				amount=amount * 100,
-				currency=team.currency.lower(),
-				customer=team.stripe_customer_id,
-				description="Prepaid App Purchase",
-				off_session=True,
-				confirm=True,
-				metadata=metadata,
-				payment_method=payment_method,
-				payment_method_options={"card": {"request_three_d_secure": "any"}},
-			)
-
-		return {
-			"payment_method": payment_method,
-			"client_secret": intent["client_secret"],
-			"publishable_key": get_publishable_key(),
-		}
-	except stripe.error.CardError as e:
-		err = e.error
-		if err.code == "authentication_required":
-			# Bring the customer back on-session to authenticate the purchase
-			return {
-				"error": "authentication_required",
-				"payment_method": err.payment_method.id,
-				"amount": amount,
-				"card": err.payment_method.card,
-				"publishable_key": get_publishable_key(),
-				"client_secret": err.payment_intent.client_secret,
-			}
-		if err.code:
-			# The card was declined for other reasons (e.g. insufficient funds)
-			# Bring the customer back on-session to ask them for a new payment method
-			return {
-				"error": err.code,
-				"payment_method": err.payment_method.id,
-				"publishable_key": get_publishable_key(),
-				"client_secret": err.payment_intent.client_secret,
-			}
 
 
 @frappe.whitelist()
@@ -674,8 +688,6 @@ def create_razorpay_mandate(max_amount: int, auth_type: str = "upi") -> dict:
 	team = get_current_team()
 	max_amount = int(max_amount)
 	team_doc = frappe.get_doc("Team", team)
-	if not team_doc.upi_autopay_enabled:
-		frappe.throw(_("UPI Autopay is not enabled for your account"))
 	if team_doc.currency != "INR":
 		frappe.throw(_("UPI Autopay is only available for currency INR"))
 	# Check if an active or pending mandate already exists
@@ -730,18 +742,6 @@ def get_razorpay_mandates() -> list[dict]:
 		],
 		order_by="creation desc",
 	)
-
-
-@frappe.whitelist()
-@role_guard.api("billing")
-def set_razorpay_mandate_as_default(mandate_name: str):
-	"""Set a Razorpay mandate as the default for the team"""
-	team = get_current_team()
-
-	mandate = frappe.get_doc("Razorpay Mandate", {"name": mandate_name, "team": team})
-	mandate.set_default()
-
-	return {"success": True}
 
 
 @frappe.whitelist()
@@ -1117,9 +1117,11 @@ def handle_transaction_result(transaction_response, integration_request):
 
 	result_code = transaction_response.get("ResultCode")
 	status = None
+	current_user = frappe.session.user
 
 	if result_code == 0:
 		try:
+			frappe.set_user("Administrator")  # To create BT and Invoice
 			status = "Completed"
 			create_mpesa_request_log(
 				transaction_response, "Host", "Mpesa Express", integration_request, None, status
@@ -1127,6 +1129,7 @@ def handle_transaction_result(transaction_response, integration_request):
 
 			create_mpesa_payment_record(transaction_response)
 		except Exception as e:
+			frappe.set_user(current_user)  # reset to current user
 			frappe.log_error(f"Mpesa: Transaction failed with error {e}")
 
 	elif result_code == 1037:  # User unreachable (Phone off or timeout)
@@ -1552,3 +1555,66 @@ def _get_usage_records_total_for_date_range(team: str, start_date, end_date):
 	)
 
 	return total_amount[0] or 0
+
+
+@frappe.whitelist()
+@role_guard.api("billing")
+def team_tiers():
+	"""Return all Team Tiers along with the current team's tier and qualification metrics."""
+	team = get_current_team(True)
+
+	tiers = frappe.get_all(
+		"Team Tier",
+		fields=["name", "tier", "amount", "paying_user_since", "last_invoice_amount"],
+		order_by="amount asc",
+	)
+
+	# Compute the team's paying-user duration (in months) and last paid subscription invoice amount
+	first_paid_invoice = frappe.get_all(
+		"Invoice",
+		filters={
+			"team": team.name,
+			"type": "Subscription",
+			"docstatus": 1,
+			"status": "Paid",
+		},
+		fields=["creation"],
+		order_by="creation asc",
+		limit=1,
+	)
+
+	paying_since_months = 0
+	if first_paid_invoice:
+		from frappe.utils import getdate, month_diff
+
+		paying_since_months = month_diff(getdate(), getdate(first_paid_invoice[0].creation)) - 1
+		if paying_since_months < 0:
+			paying_since_months = 0
+
+	last_paid_invoice = frappe.get_all(
+		"Invoice",
+		filters={
+			"team": team.name,
+			"type": "Subscription",
+			"docstatus": 1,
+			"status": "Paid",
+		},
+		fields=["total"],
+		order_by="creation desc",
+		limit=1,
+	)
+	last_invoice_amount = last_paid_invoice[0].total if last_paid_invoice else 0
+
+	has_payment_method = bool(team.payment_mode) or team.get_balance() > 0
+
+	return {
+		"tiers": tiers,
+		"current_tier": team.tier,
+		"spending_limit": team.spending_limit,
+		"currency": team.currency,
+		"team_metrics": {
+			"paying_since_months": paying_since_months,
+			"last_invoice_amount": last_invoice_amount,
+			"has_payment_method": has_payment_method,
+		},
+	}

@@ -6,9 +6,9 @@ frappe.ui.form.on('Database Server', {
 		frm.add_web_link(
 			`/dashboard/servers/${frm.doc.name}`,
 			__('Visit Dashboard'),
-		);
+		)
 
-		[
+		;[
 			[__('Ping Agent'), 'ping_agent', false, frm.doc.is_server_setup],
 			[__('Ping Ansible'), 'ping_ansible', true, frm.doc.is_server_prepared],
 			[
@@ -30,6 +30,19 @@ frappe.ui.form.on('Database Server', {
 				true,
 				frm.doc.is_server_setup,
 			],
+			[
+				__('Install Wazuh Agent'),
+				'install_wazuh_agent',
+				true,
+				frm.doc.is_server_setup,
+			],
+			[
+				__('Uninstall Wazuh Agent'),
+				'uninstall_wazuh_agent',
+				true,
+				frm.doc.is_server_setup && frm.doc.is_wazuh_agent_installed,
+			],
+			[__('Setup Auditd'), 'setup_auditd', true, frm.doc.is_server_setup],
 			[__('Setup Logrotate'), 'setup_logrotate', true, frm.doc.is_server_setup],
 			[
 				__('Fetch Keys'),
@@ -211,11 +224,30 @@ frappe.ui.form.on('Database Server', {
 				true,
 				frm.doc.is_server_setup && frm.doc.nat_server,
 			],
+			[__('Get Static IP'), 'get_static_ip', false],
 			[
 				__('Remove NAT iptables'),
 				'remove_nat_iptables',
 				true,
 				frm.doc.is_server_setup && !frm.doc.nat_server,
+			],
+			[
+				__('Migrate to Cgroup V2'),
+				'migrate_to_cgroup_v2',
+				true,
+				frm.doc.is_server_setup,
+			],
+			[
+				__('Setup MariaDB Monitor'),
+				'setup_mariadb_monitor',
+				true,
+				frm.doc.is_server_setup,
+			],
+			[
+				__('Uninstall MariaDB Monitor'),
+				'uninstall_mariadb_monitor',
+				true,
+				frm.doc.is_server_setup && frm.doc.is_mariadb_monitor_installed,
 			],
 		].forEach(([label, method, confirm, condition]) => {
 			if (typeof condition === 'undefined' || condition) {
@@ -228,26 +260,26 @@ frappe.ui.form.on('Database Server', {
 								() =>
 									frm.call(method).then((r) => {
 										if (r.message) {
-											frappe.msgprint(r.message);
+											frappe.msgprint(r.message)
 										} else {
-											frm.refresh();
+											frm.refresh()
 										}
 									}),
-							);
+							)
 						} else {
 							frm.call(method).then((r) => {
 								if (r.message) {
-									frappe.msgprint(r.message);
+									frappe.msgprint(r.message)
 								} else {
-									frm.refresh();
+									frm.refresh()
 								}
-							});
+							})
 						}
 					},
 					__('Actions'),
-				);
+				)
 			}
-		});
+		})
 		if (frm.doc.is_server_setup) {
 			frm.add_custom_button(
 				__('Increase Swap'),
@@ -263,18 +295,18 @@ frappe.ui.form.on('Database Server', {
 								default: 4,
 							},
 						],
-					});
+					})
 
 					dialog.set_primary_action(__('Increase Swap'), (args) => {
 						frm.call('increase_swap', args).then(() => {
-							dialog.hide();
-							frm.refresh();
-						});
-					});
-					dialog.show();
+							dialog.hide()
+							frm.refresh()
+						})
+					})
+					dialog.show()
 				},
 				__('Actions'),
-			);
+			)
 			frm.add_custom_button(
 				__('Perform Physical Backup'),
 				() => {
@@ -290,35 +322,43 @@ frappe.ui.form.on('Database Server', {
 								reqd: 1,
 							},
 						],
-					});
+					})
 
 					dialog.set_primary_action(__('Backup'), (args) => {
 						frm.call('perform_physical_backup', args).then(() => {
-							dialog.hide();
-							frm.refresh();
-						});
-					});
-					dialog.show();
+							dialog.hide()
+							frm.refresh()
+						})
+					})
+					dialog.show()
 				},
 				__('Actions'),
-			);
+			)
 			frm.add_custom_button(
-				__('Update Memory Allocator'),
+				__('Update Memory Allocator Settings'),
 				() => {
 					const dialog = new frappe.ui.Dialog({
-						title: __('Update Memory Allocator'),
+						title: __('Update Memory Allocator Settings'),
 						fields: [
 							{
 								fieldtype: 'Select',
 								label: __('Memory Allocator'),
-								options: ['System', 'jemalloc', 'TCMalloc']
-									.filter((option) => option !== frm.doc.memory_allocator)
-									.join('\n'),
+								options: ['System', 'jemalloc', 'TCMalloc'].join('\n'),
+								default: frm.doc.memory_allocator || 'System',
 								fieldname: 'memory_allocator',
 								reqd: 1,
 							},
+							{
+								fieldtype: 'Int',
+								label: __('tcmalloc Release Rate'),
+								description: __(
+									'Applicable only if memory allocator is set to tcmalloc. Value must be between 1 and 10. Default is 1. Higher value means more aggressive release of memory to the OS, which can reduce memory usage but may impact performance.',
+								),
+								default: frm.doc.tcmalloc_release_rate || 1,
+								fieldname: 'tcmalloc_release_rate',
+							},
 						],
-					});
+					})
 
 					dialog.set_primary_action(__('Update'), (args) => {
 						frm.call({
@@ -327,15 +367,15 @@ frappe.ui.form.on('Database Server', {
 							args: args,
 							freeze: true,
 							callback: () => {
-								dialog.hide();
-								frm.refresh();
+								dialog.hide()
+								frm.refresh()
 							},
-						});
-					});
-					dialog.show();
+						})
+					})
+					dialog.show()
 				},
 				__('Dangerous Actions'),
-			);
+			)
 
 			frm.add_custom_button(
 				__('Purge Binlogs'),
@@ -350,7 +390,7 @@ frappe.ui.form.on('Database Server', {
 								reqd: 1,
 							},
 						],
-					});
+					})
 
 					dialog.set_primary_action(__('Purge'), (args) => {
 						frm.call({
@@ -359,19 +399,19 @@ frappe.ui.form.on('Database Server', {
 							args: args,
 							freeze: true,
 							callback: () => {
-								dialog.hide();
-								frm.refresh();
+								dialog.hide()
+								frm.refresh()
 							},
-						});
-					});
-					dialog.show();
+						})
+					})
+					dialog.show()
 				},
 				__('Dangerous Actions'),
-			);
+			)
 		}
 	},
 
 	hostname: function (frm) {
-		press.set_hostname_abbreviation(frm);
+		press.set_hostname_abbreviation(frm)
 	},
-});
+})

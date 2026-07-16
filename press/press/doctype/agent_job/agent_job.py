@@ -572,9 +572,8 @@ def populate_output_cache(polled_job, job):
 def filter_active_servers(servers):
 	# Prepare list of all_active_servers for each server_type
 	# Return servers that are in all_active_servers
-	server_types = [server.server_type for server in servers]
 	all_active_servers = {}
-	for server_type in server_types:
+	for server_type in {server.server_type for server in servers}:
 		all_active_servers[server_type] = set(frappe.get_all(server_type, {"status": "Active"}, pluck="name"))
 
 	active_servers = []
@@ -635,29 +634,29 @@ def fail_old_jobs():
 			process_job_updates(job)
 		frappe.db.commit()
 
-	failed_jobs = frappe.db.get_values(
+	failed_jobs = frappe.db.get_all(
 		"Agent Job",
 		{
 			"status": ("in", ["Pending", "Running"]),
 			"job_id": ("!=", 0),
 			"creation": ("<", add_days(None, -2)),
 		},
-		"name",
 		limit=100,
-		pluck=True,
+		order_by="RAND()",
+		pluck="name",
 	)
 	update_status(failed_jobs, "Failure")
 
-	delivery_failed_jobs = frappe.db.get_values(
+	delivery_failed_jobs = frappe.db.get_all(
 		"Agent Job",
 		{
 			"job_id": 0,
 			"creation": ("<", add_days(None, -2)),
 			"status": ("!=", "Delivery Failure"),
 		},
-		"name",
 		limit=100,
-		pluck=True,
+		order_by="RAND()",
+		pluck="name",
 	)
 
 	update_status(delivery_failed_jobs, "Delivery Failure")
@@ -1108,6 +1107,8 @@ def process_job_updates(job_name: str, response_data: dict | None = None):  # no
 			AppPatch.process_patch_app(job)
 		elif job.job_type == "Run Remote Builder":
 			DeployCandidateBuild.process_run_build(job, response_data)
+		elif job.job_type == "Run Patch Build":
+			DeployCandidateBuild.process_run_patch_build(job, response_data)
 		elif job.job_type == "Create User":
 			process_create_user_job_update(job)
 		elif job.job_type == "Complete Setup Wizard":

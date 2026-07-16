@@ -15,7 +15,7 @@ import semantic_version as sv
 import tomli
 from frappe.model.document import Document
 
-from press.api.github import get_access_token
+from press.api.github import GithubFetchError, get_access_token
 from press.press.doctype.app_source.app_source import AppSource
 from press.utils import log_error
 
@@ -72,17 +72,8 @@ class AppRelease(Document):
 	def get_list_query(query, filters=None, **list_args):
 		app_release = frappe.qb.DocType("App Release")
 		release_approve_request = frappe.qb.DocType("App Release Approval Request")
+		marketplace_app_audit = frappe.qb.DocType("Marketplace App Audit")
 
-		# Subquery to get the latest screening_status for each app_release
-		latest_approval_request = (
-			frappe.qb.from_(release_approve_request)
-			.select(release_approve_request.screening_status)
-			.where(release_approve_request.app_release == app_release.name)
-			.orderby(release_approve_request.creation, order=frappe.qb.terms.Order.desc)
-			.limit(1)
-		)
-
-		# Subquery to get the latest name for each app_release
 		approval_request_name = (
 			frappe.qb.from_(release_approve_request)
 			.select(release_approve_request.name)
@@ -91,11 +82,18 @@ class AppRelease(Document):
 			.limit(1)
 		)
 
-		# Main query that selects app_release fields and the latest screening_status and name
+		latest_audit_result = (
+			frappe.qb.from_(marketplace_app_audit)
+			.select(marketplace_app_audit.audit_result)
+			.where(marketplace_app_audit.app_release == app_release.name)
+			.orderby(marketplace_app_audit.creation, order=frappe.qb.terms.Order.desc)
+			.limit(1)
+		)
+
 		query = query.select(
 			app_release.name,
-			latest_approval_request.as_("screening_status"),
 			approval_request_name.as_("approval_request_name"),
+			latest_audit_result.as_("audit_result"),
 		)
 
 		return query  # noqa
@@ -318,7 +316,7 @@ class AppRelease(Document):
 		token = get_access_token(source.github_installation_id)
 		if token is None:
 			# Do not edit without updating deploy_notifications.py
-			raise Exception("App installation token could not be fetched", self.app)
+			raise GithubFetchError("App installation token could not be fetched", self.app)
 
 		return f"https://x-access-token:{token}@github.com/{source.repository_owner}/{source.repository}"
 
@@ -396,8 +394,9 @@ class AppRelease(Document):
 		"""
 		Currently, we only audit marketplace app releases. Later we can extend this to custom apps as well.
 		"""
-		# determine whether the release's source is a marketplace app
-		if not frappe.db.exists("Marketplace App", {"app": self.app}):
+		# determine whether the release's source is a marketplace app and only if it's published.
+		# for new apps which are not published yet, the audit will be triggered by creating marketplace app approval request.
+		if not frappe.db.exists("Marketplace App", {"app": self.app, "status": "Published"}):
 			return
 
 		marketplace_app, bypass_automated_audit = frappe.db.get_value(

@@ -20,17 +20,21 @@ from press.api.github import app, get_access_token
 from press.marketplace.doctype.marketplace_app_plan.marketplace_app_plan import (
 	get_app_plan_features,
 )
+from press.overrides import get_permission_query_conditions_for_doctype
 from press.press.doctype.app.app import VersioningError, parse_frappe_version
 from press.press.doctype.app.app import new_app as new_app_doc
 from press.press.doctype.app_release_approval_request.app_release_approval_request import (
 	AppReleaseApprovalRequest,
 )
 from press.press.doctype.marketplace_app.utils import get_rating_percentage_distribution
-from press.utils import get_current_team, get_last_doc
+from press.utils import docs, get_current_team, get_last_doc
 
 if TYPE_CHECKING:
 	from press.press.doctype.app_source.app_source import AppSource
 	from press.press.doctype.site.site import Site
+
+
+get_permission_query_conditions = get_permission_query_conditions_for_doctype("Marketplace App")
 
 
 class MarketplaceApp(WebsiteGenerator):
@@ -74,15 +78,6 @@ class MarketplaceApp(WebsiteGenerator):
 		privacy_policy: DF.Data | None
 		published: DF.Check
 		published_on: DF.Date | None
-		review_stage: DF.Literal[
-			"Not Started",
-			"Description Missing",
-			"Logo Missing",
-			"App Release Not Reviewed",
-			"Ready for Review",
-			"Ready to Publish",
-			"Rejected",
-		]
 		route: DF.Data | None
 		run_after_install_script: DF.Check
 		run_after_uninstall_script: DF.Check
@@ -92,7 +87,6 @@ class MarketplaceApp(WebsiteGenerator):
 		site_config: DF.JSON | None
 		sources: DF.Table[MarketplaceAppVersion]
 		status: DF.Literal["Draft", "Published", "In Review", "Attention Required", "Rejected", "Disabled"]
-		stop_auto_review: DF.Check
 		subject: DF.Data | None
 		subscription_type: DF.Literal["Free", "Paid", "Freemium"]
 		subscription_update_hook: DF.Data | None
@@ -108,7 +102,6 @@ class MarketplaceApp(WebsiteGenerator):
 		"title",
 		"status",
 		"description",
-		"review_stage",
 	]
 
 	def autoname(self):
@@ -117,10 +110,14 @@ class MarketplaceApp(WebsiteGenerator):
 	@dashboard_whitelist()
 	def delete(self):
 		if self.status != "Draft":
-			frappe.throw("You can only delete an app in Draft status")
+			frappe.throw(
+				f"Only apps in Draft status can be deleted. Published apps must be unpublished first — please contact support to take this app down. {docs.doc_link(docs.MARKETPLACE)}."
+			)
 
 		if get_current_team() != self.team:
-			frappe.throw("You are not authorized to delete this app")
+			frappe.throw(
+				"Only the team that owns this app can delete it. Please switch to the owning team and try again."
+			)
 
 		super().delete()
 
@@ -145,7 +142,9 @@ class MarketplaceApp(WebsiteGenerator):
 		)
 
 		if len(approval_requests) == 0:
-			frappe.throw("No approval request exists for the given app release")
+			frappe.throw(
+				"There's no review request to cancel for this app release. It may have already been cancelled or processed."
+			)
 
 		frappe.get_doc("App Release Approval Request", approval_requests[0]).cancel()
 
@@ -213,7 +212,9 @@ class MarketplaceApp(WebsiteGenerator):
 
 	def validate_summary(self):
 		if len(self.description) > 140:
-			frappe.throw("Marketplace App summary cannot be more than 140 characters.")
+			frappe.throw(
+				f"The app summary is {len(self.description)} characters. Please shorten it to 140 characters or fewer."
+			)
 
 	def validate_sources(self):
 		for source in self.sources:
@@ -309,6 +310,7 @@ class MarketplaceApp(WebsiteGenerator):
 				branch=to_branch,
 				version=version,
 				github_installation_id=source_doc.github_installation_id,
+				ease_versioning_constrains=True,
 			)
 			if version not in [version.version for version in source_doc.versions]:
 				source_doc.append("versions", {"version": version})
@@ -325,6 +327,7 @@ class MarketplaceApp(WebsiteGenerator):
 				branch=to_branch,
 				version=version,
 				github_installation_id=source_doc.github_installation_id,
+				ease_versioning_constrains=True,
 			)
 			source_doc.branch = to_branch
 			source_doc.save()
@@ -342,7 +345,7 @@ class MarketplaceApp(WebsiteGenerator):
 		self.save()
 
 	@dashboard_whitelist()
-	def add_version(self, version, branch):
+	def add_version(self, version: str, repo_owner: str, repo_name: str, branch: str):
 		existing_source = frappe.db.exists(
 			"App Source",
 			[
@@ -350,13 +353,29 @@ class MarketplaceApp(WebsiteGenerator):
 				["App Source", "team", "=", self.team],
 				["App Source", "branch", "=", branch],
 				["App Source", "enabled", "=", 1],
+				["App Source", "repository", "=", repo_name],
+				["App Source", "repository_owner", "=", repo_owner],
 			],
 		)
-		source_doc: "AppSource" = (
-			frappe.get_doc("App Source", existing_source)
-			if existing_source
-			else frappe.get_doc("App Source", self.sources[0].source)
+		# When the branch isn't an existing source yet, copy connection details from any source the
+		# team already has for the same repository — the same sources that populate the dashboard's
+		# branch dropdown. We can't rely on self.sources, which may be empty (e.g. all versions of a
+		# draft app were removed) even though App Source records still exist.
+		template_source = existing_source or frappe.db.exists(
+			"App Source",
+			{
+				"app": self.app,
+				"team": self.team,
+				"repository": repo_name,
+				"repository_owner": repo_owner,
+				"enabled": 1,
+			},
 		)
+		if not template_source:
+			frappe.throw(
+				_("No app source found for {0}/{1} to add a version from.").format(repo_owner, repo_name)
+			)
+		source_doc: "AppSource" = frappe.get_doc("App Source", template_source)
 		validate_frappe_version_for_branch(
 			app_name=self.app,
 			owner=source_doc.repository_owner,
@@ -364,6 +383,7 @@ class MarketplaceApp(WebsiteGenerator):
 			branch=branch,
 			version=version,
 			github_installation_id=source_doc.github_installation_id,
+			ease_versioning_constrains=True,
 		)
 		if existing_source:
 			# If source with branch to switch already exists, just add version to child table of source and use the same
@@ -383,9 +403,7 @@ class MarketplaceApp(WebsiteGenerator):
 					"app": self.app,
 					"team": self.team,
 					"branch": branch,
-					"repository_url": frappe.db.get_value(
-						"App Source", {"name": self.sources[0].source}, "repository_url"
-					),
+					"repository_url": source_doc.repository_url,
 					"public": 1,
 				}
 			)
@@ -396,7 +414,7 @@ class MarketplaceApp(WebsiteGenerator):
 		self.save()
 
 	@dashboard_whitelist()
-	def remove_version(self, version):
+	def remove_version(self, version: str):
 		if self.status == "Published" and len(self.sources) == 1:
 			frappe.throw("Failed to remove. Need at least 1 version for a published app")
 
@@ -696,7 +714,7 @@ class MarketplaceApp(WebsiteGenerator):
 	@dashboard_whitelist()
 	def mark_app_ready_for_review(self):
 		# TODO: Start security check and auto deploy process here
-		self.review_stage = "Ready for Review"
+		self.status = "In Review"
 		self.save()
 
 	@dashboard_whitelist()
@@ -828,7 +846,7 @@ def marketplace_app_hook(app=None, site: Site | None = None, op="install"):
 		for app_name in site_apps:
 			run_script(app_name, site, op)
 	else:
-		run_script(app, site, op)
+		run_script(app, site, op)  # type: ignore[arg-type]
 
 
 def get_script_name(app, op):

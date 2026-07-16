@@ -41,6 +41,7 @@ class ProxyServer(BaseServer):
 		hostname: DF.Data
 		hostname_abbreviation: DF.Data | None
 		ip: DF.Data | None
+		is_auditd_setup: DF.Check
 		is_primary: DF.Check
 		is_proxysql_setup: DF.Check
 		is_replication_setup: DF.Check
@@ -48,6 +49,8 @@ class ProxyServer(BaseServer):
 		is_server_setup: DF.Check
 		is_ssh_proxy_setup: DF.Check
 		is_static_ip: DF.Check
+		is_wazuh_agent_installed: DF.Check
+		wazuh_agent_status: DF.Data | None
 		is_wireguard_setup: DF.Check
 		mem_limits: DF.Code | None
 		plan: DF.Link | None
@@ -152,6 +155,8 @@ class ProxyServer(BaseServer):
 			if play.status == "Success":
 				self.status = "Active"
 				self.is_server_setup = True
+				self.set_auditd_setup_from_base_playbook()
+				self.install_wazuh_agent_if_configured()
 			else:
 				self.status = "Broken"
 		except Exception:
@@ -179,7 +184,7 @@ class ProxyServer(BaseServer):
 	@frappe.whitelist()
 	def setup_ssh_proxy(self):
 		if not self.ssh_certificate_authority:
-			frappe.throw("SSH Certificate Authority is required to setup SSH Proxy")
+			frappe.throw("Please configure an SSH Certificate Authority before setting up the SSH Proxy.")
 
 		frappe.enqueue_doc(self.doctype, self.name, "_setup_ssh_proxy", queue="long", timeout=1200)
 
@@ -504,12 +509,16 @@ class ProxyServer(BaseServer):
 
 		primary = frappe.db.get_value("Proxy Server", self.primary, ["cluster", "is_static_ip"], as_dict=True)
 		if self.cluster != primary.cluster:
-			frappe.throw("Failover can only be initiated between Proxy Servers in the same cluster")
+			frappe.throw(
+				"Failover can only be initiated between proxy servers in the same cluster. Please choose a target proxy server in the same cluster."
+			)
 
 		if (not primary.is_static_ip and not self.is_static_ip) or (
 			primary.is_static_ip and self.is_static_ip
 		):
-			frappe.throw("Failover can only be initiated if one of the proxy server has a static ip")
+			frappe.throw(
+				"Failover needs one of the proxy servers to have a static IP. Please assign a static IP to a proxy server first."
+			)
 
 		frappe.get_doc(
 			{
