@@ -56,8 +56,8 @@ on `hel1-hetzner`:
 
 - [x] `cloud_provider` = `Hetzner`, `status` = `Active`
 - [x] `region` set (e.g. `hel1`)
-- [x] `vpc_id` set (Hetzner network id, e.g. `12090024`)
-- [x] `subnet_cidr_block` set (e.g. `10.3.0.0/16`)
+- [x] `vpc_id` set (Hetzner network id)
+- [x] `subnet_cidr_block` set (a private CIDR, e.g. `10.x.0.0/16`)
 - [x] `ssh_key` set and the SSH Key exists
 - [x] `security_group_id` + `proxy_security_group_id` set (Hetzner firewalls)
 - [x] `hetzner_api_token` set (read + write permissions)
@@ -73,13 +73,23 @@ Cluster to re-run `after_insert` → `provision_on_hetzner()`.
 nothing can be created.
 
 > **CRITICAL — location availability.** A server type must be *in stock* in the
-> datacenter. Pricing existing ≠ available. In **hel1** the cheap `cpx11`/`cpx31`
-> line is NOT available — provisioning them throws
-> `unsupported location for server type`. Only these SHARED types work in hel1:
-> `cpx12`, `cpx22`, `cpx32`, `cpx42`, `cpx52`, `cpx62`.
->
-> Always run **Check Machine Availability** (desk button on Cluster) or query the
+> datacenter. **Pricing existing ≠ available** — a type can show a price yet fail
+> to provision with `unsupported location for server type`. Always run
+> **Check Machine Availability** (desk button on Cluster) or query the
 > datacenter's `server_types.available` before choosing a type.
+>
+> **Availability by location (surveyed):**
+>
+> | Location | Available shared types | Cheapest / 2vCPU-4GB |
+> |---|---|---|
+> | nbg1 (Nuremberg), **hel1 (Helsinki)**, fsn1 (Falkenstein) | `cpx12–cpx62` | cpx12 €11.49 / cpx22 €19.49 |
+> | sin (Singapore) | `cpx12–cpx62` | cpx12 €15.49 / cpx22 €26.49 |
+> | ash (Ashburn US), hil (Hillsboro US) | `cpx11–cpx51` | cpx11 €17.49 / cpx21 €31.99 |
+>
+> The three **EU locations are the cheapest tier and identical** in price. `hel1`
+> is already the cheapest option — no cheaper location exists. The old `cpx11`
+> line only exists in the (pricier) US locations; the "€5.49 cpx11" that appears
+> in raw pricing for hel1 is a phantom entry — it is NOT provisionable there.
 
 > **Shared vs Dedicated.** `ccx*` types are **Dedicated** (expensive, e.g.
 > `ccx13` = €42.99/mo). `cpx*`/`cax*`/`cx*` are **Shared** (cheap). Use SHARED.
@@ -130,7 +140,7 @@ is why the bootstrap must be a console/script step, not the desk button.
 ```python
 import frappe
 frappe.set_user("Administrator")
-TEAM = "cacogq3slc"                      # owning team (from your infra)
+TEAM = "<team-id>"                        # owning team — look up on the Team doctype
 cluster = frappe.get_doc("Cluster", "hel1-hetzner")
 
 # 1) Proxy (series n) — SHARED, one per cluster
@@ -253,10 +263,14 @@ delete the records (no Hetzner call, no billing).
 
 ## 8. Quick reference — this cluster's facts
 
-- Cluster: **`hel1-hetzner`** (Hetzner, region `hel1`, public, Active)
-- VPC: `12090024`, subnet `10.3.0.0/16`, SSH key `Acs macPC`
-- Firewalls: server `10788622`, proxy `10788623`
-- Owning team: **`cacogq3slc`**
+> Infrastructure identifiers below are **redacted** (this file is public). Look up
+> the real values on the Cluster doctype (`/app/cluster/<cluster>`), never commit
+> them here.
+
+- Cluster: **`<cluster>`** (Hetzner, region `hel1`, public, Active)
+- VPC: `<vpc-id>`, subnet `<subnet-cidr>`, SSH key `<ssh-key-name>`
+- Firewalls: server `<security-group-id>`, proxy `<proxy-security-group-id>`
+- Owning team: **`<team-id>`**
 - Available SHARED types in hel1: `cpx12, cpx22, cpx32, cpx42, cpx52, cpx62`
 - Plans created: `Hetzner Proxy hel1` (cpx12), `Hetzner DB hel1` (cpx22), `Hetzner App hel1` (cpx22)
 - Series: `n`=Proxy, `m`=Database, `f`=App
