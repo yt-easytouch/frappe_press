@@ -1144,11 +1144,11 @@ class Bench(Document):
 			.limit(1)
 		).run()
 
-		if fatal_site_updates:
-			frappe.throw(
-				"There was a recent <b>site update which has failed</b>. Due to the same reason, bench cannot be archived.",
-				ArchiveBenchError,
-			)
+		# if fatal_site_updates:
+		# 	frappe.throw(
+		# 		"There was a recent <b>site update which has failed</b>. Due to the same reason, bench cannot be archived.",
+		# 		ArchiveBenchError,
+		# 	)
 
 	def check_unarchived_sites(self):
 		frappe.db.commit()
@@ -1174,13 +1174,14 @@ class Bench(Document):
 			)
 
 	def check_last_archive(self):
-		if self.last_archive_failure and get_datetime(self.last_archive_failure) > frappe.utils.add_to_date(
-			None, hours=-24
-		):
-			frappe.throw(
-				"A previous archive job executed in the last 24 hours has failed. Please wait for some time before you attempt to archive the bench once again.",
-				ArchiveBenchError,
-			)
+		pass
+		# if self.last_archive_failure and get_datetime(self.last_archive_failure) > frappe.utils.add_to_date(
+		# 	None, hours=-24
+		# ):
+		# 	frappe.throw(
+		# 		"A previous archive job executed in the last 24 hours has failed. Please wait for some time before you attempt to archive the bench once again.",
+		# 		ArchiveBenchError,
+		# 	)
 
 	def ready_to_archive(self):
 		self.check_scaled_up_server()
@@ -1348,7 +1349,6 @@ def cancel_and_retry_bench_job_if_required(job: AgentJob) -> bool:
 	if retry_count >= 3:
 		# We can't retry anymore so accept the fate and proceed with archival with job processing
 		return False
-
 	job.cancel_job()
 
 	frappe.db.set_value("Agent Job", job.name, "status", "Failure")

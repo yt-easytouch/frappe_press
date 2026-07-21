@@ -312,6 +312,8 @@ export default {
 				method: 'fetch_database_table_schema',
 				args: {
 					reload,
+					// Playground only needs columns for autocompletion; skip the slow size scan.
+					include_table_size: false,
 				},
 			});
 		},

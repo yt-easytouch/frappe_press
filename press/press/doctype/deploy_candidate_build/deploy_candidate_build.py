@@ -877,7 +877,7 @@ class DeployCandidateBuild(Document):
 				"merge_default_and_short_rq_queues": self.candidate.merge_default_and_short_rq_queues,
 				"custom_workers": self.candidate.custom_workers,
 				"custom_workers_group": self.candidate.custom_workers_group,
-				"is_code_server_enabled": False,  # We no longer seem to use this since code server runs on press
+				"is_code_server_enabled": self.candidate.is_code_server_enabled,
 				"is_ssh_enabled": False,  # Set by bench when creating container
 				"dependencies": dependencies,
 			},
@@ -1670,4 +1670,4 @@ def on_doctype_update():
 		return
 	# Ignoring filesorts
 	# https://dev.mysql.com/doc/refman/8.4/en/order-by-optimization.html#order-by-index-use
-	frappe.db.add_index("Deploy Candidate Build", ["team", "group", "creation"])
+	frappe.db.add_index("Deploy Candidate Build", ["team", "`group`", "creation"], "team_group_creation_index")

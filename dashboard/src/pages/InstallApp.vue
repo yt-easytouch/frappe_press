@@ -151,7 +151,7 @@
 							v-model="agreedToRegionConsent"
 							:label="`I agree that the laws of the region selected by me ${
 								this.cluster ? `(${this.cluster})` : ''
-							} shall stand applicable to me and Frappe.`"
+							} shall stand applicable to me and Yooltech.`"
 						/>
 						<ErrorMessage class="my-2" :message="$resources.newSite.error" />
 						<Button
@@ -202,7 +202,7 @@ export default {
 	},
 	pageMeta() {
 		return {
-			title: `Install ${this.appDoc.title} - Frappe Cloud`,
+			title: `Install ${this.appDoc.title} - Easytouch Cloud`,
 		};
 	},
 	components: {

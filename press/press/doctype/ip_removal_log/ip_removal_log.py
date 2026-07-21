@@ -183,22 +183,27 @@ class IPRemovalLog(Document, StepHandler):
 		step.server_ping = "Success" if result.get("status") == "Success" else "Failure"
 		step.save()
 
-	def check_local_dns_propagation(self, step, server_name, private_ip):
+	def check_local_dns_propagation(self, step, server_name, private_ip, counter=30, interval=10):
 		step.attempt = 0
-		while step.attempt < 60:
+		while counter > 0:
 			try:
 				ip = socket.gethostbyname(server_name)
 				if ip == private_ip:
-					step.save()
 					return True
 			except socket.gaierror:
 				pass
 
 			step.attempt += 1
-			time.sleep(10)
+			step.save()
 
-		step.save()
+			counter -= 1
+			time.sleep(interval)
+
 		return False
+
+	def handle_step_failure(self):
+		self.error = frappe.get_traceback(with_context=True)
+		self.save()
 
 	@frappe.whitelist()
 	def reduce_dns_ttl(self):

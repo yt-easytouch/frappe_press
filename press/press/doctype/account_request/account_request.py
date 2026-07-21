@@ -88,7 +88,7 @@ class AccountRequest(Document):
 
 		if not self.request_key:
 			self.request_key = random_string(32)
-			self.request_key_expiration_time = frappe.utils.add_to_date(hours=24)
+			self.request_key_expiration_time = frappe.utils.add_to_date(frappe.utils.now_datetime(), minutes=10)
 
 		if not self.otp:
 			self.otp = generate_otp()
@@ -261,8 +261,8 @@ class AccountRequest(Document):
 					sender = frappe.get_value("Email Account", email_account, "email_id")
 		else:
 			template = "verify_account"
-			if self.invited_by:
-				subject = f"You are invited by {self.invited_by} to join Frappe Cloud"
+			if self.invited_by and self.role != "Press Admin":
+				subject = f"You are invited by {self.invited_by} to join Easytouch Cloud"
 				template = "invite_team_member"
 
 		args.update(

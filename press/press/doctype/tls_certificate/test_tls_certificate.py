@@ -14,6 +14,7 @@ from press.press.doctype.root_domain.test_root_domain import create_test_root_do
 from press.press.doctype.tls_certificate.tls_certificate import (
 	BaseCA,
 	LetsEncrypt,
+	ScmeSH,
 	TLSCertificate,
 )
 
@@ -51,6 +52,7 @@ class TestTLSCertificate(FrappeTestCase):
 	def tearDown(self):
 		frappe.db.rollback()
 
+	@patch.object(ScmeSH, "_obtain", new=Mock())
 	def test_renewal_of_secondary_wildcard_domains_updates_server(self):
 		erpnext_domain = create_test_root_domain("erpnext.xyz")
 		fc_domain = create_test_root_domain("fc.dev")
@@ -67,6 +69,7 @@ class TestTLSCertificate(FrappeTestCase):
 			cert._obtain_certificate()
 		mock_setup_wildcard_hosts.assert_called_once()
 
+	@patch.object(ScmeSH, "_obtain", new=Mock())
 	def test_renewal_of_primary_wildcard_domains_doesnt_call_setup_wildcard_domains(self):
 		erpnext_domain = create_test_root_domain("erpnext.xyz")
 		fc_domain = create_test_root_domain("fc.dev")
@@ -84,6 +87,7 @@ class TestTLSCertificate(FrappeTestCase):
 
 		mock_setup_wildcard_hosts.assert_not_called()
 
+	@patch.object(ScmeSH, "_obtain", new=Mock())
 	def test_renewal_of_primary_domain_calls_update_tls_certificates(self):
 		# Use a diffferent domain to avoid any chance of
 		# Reusing same non wildcard domain in tests
@@ -100,3 +104,54 @@ class TestTLSCertificate(FrappeTestCase):
 		):
 			cert._obtain_certificate()
 		mock_trigger_server_tls_setup.assert_called()
+
+	def test_selects_acmesh_for_wildcard_when_20i_bearer_is_configured(self):
+		cert = create_test_tls_certificate("fc2.dev", wildcard=True)
+		settings = frappe._dict(
+			certbot_directory=".certbot",
+			webroot_directory=".well-known/acme-challenge",
+			eff_registration_email="ops@example.com",
+			dns_20i_bearer="token",
+		)
+
+		ca = cert._get_certificate_authority(settings)
+
+		self.assertIsInstance(ca, ScmeSH)
+
+	def test_falls_back_to_letsencrypt_without_20i_bearer(self):
+		cert = create_test_tls_certificate("fc2.dev", wildcard=True)
+		settings = frappe._dict(
+			certbot_directory=".certbot",
+			webroot_directory=".well-known/acme-challenge",
+			eff_registration_email="ops@example.com",
+		)
+
+		ca = cert._get_certificate_authority(settings)
+
+		self.assertIsInstance(ca, LetsEncrypt)
+
+	@patch("subprocess.check_output")
+	def test_acmesh_command_uses_dns_20i_and_challenge_alias(self, mock_check_output):
+		settings = frappe._dict(
+			certbot_directory=".certbot",
+			webroot_directory=".well-known/acme-challenge",
+			eff_registration_email="ops@example.com",
+			dns_20i_bearer="token",
+			challenge_alias="_acme-challenge.validation.example.com",
+			acme_sh_path="/usr/local/acme.sh/acme.sh",
+			use_staging_ca=1,
+		)
+		ca = ScmeSH(settings)
+
+		ca.obtain(domain="example.com", rsa_key_size=2048, wildcard=True)
+
+		command = " ".join(mock_check_output.call_args.args[0])
+		self.assertIn("/usr/local/acme.sh/acme.sh", command)
+		self.assertIn("--dns dns_20i", command)
+		self.assertIn("--bearer token", command)
+		self.assertIn("--challenge-alias _acme-challenge.validation.example.com", command)
+		if frappe.conf.developer_mode:
+			self.assertIn("--server letsencrypt_test", command)
+		else:
+			self.assertIn("--server letsencrypt", command)
+

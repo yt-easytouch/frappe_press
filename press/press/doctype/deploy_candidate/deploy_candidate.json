@@ -10,6 +10,7 @@
 		"build_token",
 		"feature_flags_section",
 		"is_redisearch_enabled",
+		"is_code_server_enabled",
 		"redis_cache_size",
 		"use_app_cache",
 		"compress_app_cache",
@@ -106,6 +107,14 @@
 			"fieldname": "is_redisearch_enabled",
 			"fieldtype": "Check",
 			"label": "Is RediSearch Enabled"
+		},
+		{
+			"default": "0",
+			"fetch_from": "group.is_code_server_enabled",
+			"fieldname": "is_code_server_enabled",
+			"fieldtype": "Check",
+			"label": "Is Code Server Enabled",
+			"read_only": 1
 		},
 		{
 			"fieldname": "packages",

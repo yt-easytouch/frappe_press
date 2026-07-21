@@ -426,7 +426,7 @@ scheduler_events = {
 	},
 }
 
-deploy_hours = [1, 2, 3, 4, 5, 21, 22, 23]  # Purposefully avoiding 0
+deploy_hours = [1, 2, 3, 4, 5]  # Early morning only; avoiding 0 and evening hours (21-23)
 
 fixtures = [
 	"Agent Job Type",
@@ -441,7 +441,7 @@ fixtures = [
 	"Server Storage Plan",
 	"Server Snapshot Plan",
 	"Press Webhook Event",
-	"Site Plan",
+	# "Site Plan",
 	"Server Plan",
 	"Team Tier",
 ]

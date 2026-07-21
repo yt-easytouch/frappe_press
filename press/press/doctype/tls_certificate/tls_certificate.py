@@ -2,6 +2,7 @@
 # For license information, please see license.txt
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
@@ -122,7 +123,7 @@ class TLSCertificate(Document):
 			return
 		try:
 			settings = frappe.get_doc("Press Settings", "Press Settings")
-			ca = LetsEncrypt(settings)
+			ca = self._get_certificate_authority(settings)
 			(
 				self.certificate,
 				self.full_chain,
@@ -169,6 +170,13 @@ class TLSCertificate(Document):
 			self.trigger_server_tls_setup_callback()
 			self._update_secondary_wildcard_domains()
 			self.setup_standalone_wildcard_hosts()
+
+	def _get_certificate_authority(self, settings):
+		if self.wildcard or frappe.conf.developer_mode:
+			acme_ca = ScmeSH(settings)
+			if acme_ca.bearer_token:
+				return acme_ca
+		return LetsEncrypt(settings)
 
 	def _update_secondary_wildcard_domains(self):
 		"""
@@ -664,3 +672,93 @@ class LetsEncrypt(BaseCA):
 	@property
 	def private_key_file(self):
 		return os.path.join(self.directory, "live", self.domain, "privkey.pem")
+
+
+class ScmeSH(BaseCA):
+	def __init__(self, settings):
+		super().__init__(settings)
+		self.directory = settings.certbot_directory
+		self.webroot_directory = settings.webroot_directory
+		self.eff_registration_email = settings.eff_registration_email
+		self.bearer_token = self._get_bearer_token()
+		self.challenge_alias = getattr(settings, "challenge_alias", None)
+		if frappe.conf.developer_mode and settings.use_staging_ca:
+			self.staging = True
+		else:
+			self.staging = False
+
+	def _obtain(self):
+		acme_home = self.acme_root
+		os.makedirs(acme_home, exist_ok=True)
+
+		if not self.bearer_token:
+			raise frappe.ValidationError("Bearer token for 20i DNS is not configured in Press Settings.")
+
+		plugin = (
+			f"--dns dns_20i --bearer {self.bearer_token}"
+			if self.wildcard or frappe.conf.developer_mode
+			else f"--webroot {self.webroot_directory}"
+		)
+		server = "letsencrypt_test" if self.staging else "letsencrypt"
+		challenge_alias = f"--challenge-alias {self.challenge_alias}" if self.challenge_alias else ""
+
+		command = (
+			f"{self.acme_sh_path} --issue {plugin} --server {server} --force "
+			f"--keylength {self.rsa_key_size} "
+			f"-d {self.domain} "
+			f"--home {acme_home} "
+			f"--accountemail {self.eff_registration_email} "
+			f"{challenge_alias}"
+		)
+
+		try:
+			subprocess.check_output(shlex.split(command), stderr=subprocess.STDOUT)
+		except subprocess.CalledProcessError as e:
+			output = (e.output or b"").decode()
+			log_error("acme.sh Exception", command=command, output=output)
+			raise e
+
+	@property
+	def acme_sh_path(self):
+		return getattr(self.settings, "acme_sh_path", None) or "/usr/local/acme.sh/acme.sh"
+
+	@property
+	def acme_root(self):
+		return self.directory if os.path.basename(self.directory.rstrip("/")) == "acme.sh" else os.path.join(self.directory, "acme.sh")
+
+	@property
+	def certbot_root(self):
+		return os.path.dirname(self.acme_root.rstrip("/"))
+
+	def _get_bearer_token(self):
+		with suppress(Exception):
+			token = self.settings.get_password("dns_20i_bearer")
+			if token:
+				return token
+
+		token = getattr(self.settings, "dns_20i_bearer", None)
+		if token:
+			return token
+
+		secrets_file = os.path.join(self.certbot_root, ".secrets", "twentyi.json")
+		with suppress(Exception):
+			with open(secrets_file) as f:
+				return json.load(f).get("bearer")
+
+		return None
+
+	@property
+	def certificate_file(self):
+		return os.path.join(self.acme_root, self.domain, f"{self.domain}.cer")
+
+	@property
+	def full_chain_file(self):
+		return os.path.join(self.acme_root, self.domain, "fullchain.cer")
+
+	@property
+	def intermediate_chain_file(self):
+		return os.path.join(self.acme_root, self.domain, "ca.cer")
+
+	@property
+	def private_key_file(self):
+		return os.path.join(self.acme_root, self.domain, f"{self.domain}.key")

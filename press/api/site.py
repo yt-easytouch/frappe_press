@@ -1266,6 +1266,9 @@ def set_bench_and_clusters(version, for_bench):
 
 		filters = {"name": ("in", allowed_cluster_names)}
 
+		if not get_current_team(get_doc=True).is_frappe_compute_internal_user:
+			filters["cloud_provider"] = ("!=", "Frappe Compute")
+
 		version.group.clusters = frappe.db.get_all(
 			"Cluster",
 			filters=filters,
@@ -1287,6 +1290,9 @@ def get_additional_clusters_for_private_benches(existing_clusters, cloud_provide
 		return []
 
 	filters = {"parent": ("in", private_bench_site_plans_providers)}
+
+	if not get_current_team(get_doc=True).is_frappe_compute_internal_user:
+		filters["name"] = ("!=", "Frappe Compute")
 
 	allowed_providers = frappe.db.get_all(
 		"Cloud Providers",
@@ -2119,6 +2125,18 @@ def deactivate(name):
 @protected("Site")
 def activate(name):
 	frappe.get_doc("Site", name).activate()
+
+
+@frappe.whitelist()
+@protected("Site")
+def suspend(name, reason=None, skip_reload=False):
+	frappe.get_doc("Site", name).suspend(reason=reason, skip_reload=skip_reload)
+
+
+@frappe.whitelist()
+@protected("Site")
+def unsuspend(name, reason=None):
+	frappe.get_doc("Site", name).unsuspend(reason=reason)
 
 
 @frappe.whitelist()

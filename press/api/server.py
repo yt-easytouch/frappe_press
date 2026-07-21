@@ -648,6 +648,10 @@ def options():
 
 	# Temporarily here to skip the Frappe Compute cloud provider
 
+	# Temporarily here to skip the Frappe Compute cloud provider
+	if not get_current_team(get_doc=True).is_frappe_compute_internal_user:
+		regions_filter["cloud_provider"] = ("not in", ["Generic", "Frappe Compute"])
+
 	regions = frappe.get_all(
 		"Cluster",
 		regions_filter,

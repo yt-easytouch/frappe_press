@@ -56,7 +56,7 @@ def create_bench_group(
 	ctx: typer.Context,
 	name: Annotated[str, typer.Argument(help="Bench group name")],
 	version: Annotated[
-		str, typer.Option("--version", help="Frappe Framework Version (e.g. Version 15)")
+		str, typer.Option("--version", help="Framework Version (e.g. Version 15)")
 	] = "",
 	server: Annotated[str, typer.Option("--server", help="Server name")] = "",
 	cluster: Annotated[str, typer.Option("--cluster", help="Cluster (e.g. Mumbai)")] = "",

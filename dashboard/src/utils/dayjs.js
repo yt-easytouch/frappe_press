@@ -17,14 +17,15 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.extend(advancedFormat);
 
+const serverTimezone = window.system_timezone || 'Africa/Mogadishu';
+
 export function dayjsLocal(dateTimeString) {
 	let localTimezone = dayjs.tz.guess();
-	// dates are stored in Asia/Calcutta timezone on the server
-	return dayjs.tz(dateTimeString, 'Asia/Calcutta').tz(localTimezone);
+	return dayjs.tz(dateTimeString, serverTimezone).tz(localTimezone);
 }
 
 export function dayjsIST(dateTimeString) {
-	return dayjs(dateTimeString).tz('Asia/Calcutta');
+	return dayjs(dateTimeString).tz(serverTimezone);
 }
 
 export function dayjsFloorToMinutes(d, interval) {

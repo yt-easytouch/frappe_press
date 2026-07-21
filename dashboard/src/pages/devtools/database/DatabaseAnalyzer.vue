@@ -507,6 +507,8 @@ export default {
 						method: 'fetch_database_table_schema',
 						args: {
 							reload: this.forceSchemaRefresh,
+							// Analyzer needs per-table sizes for the size breakup.
+							include_table_size: true,
 						},
 					};
 				},
@@ -945,7 +947,7 @@ export default {
 				title: 'Optimize Database Tables',
 				message: tableName
 					? `Do you want to optimize the table <strong>${tableName}</strong> to reclaim space ?<br>`
-					: `Frappe Cloud will find tables where reclaimable space exceeds 100 MB or 20% of the table size.<br>Are you sure you want to optimize the database tables ?<br>`,
+					: `Easytouch Cloud will find tables where reclaimable space exceeds 100 MB or 20% of the table size.<br>Are you sure you want to optimize the database tables ?<br>`,
 				primaryAction: {
 					label: 'Optimize',
 					variant: 'solid',

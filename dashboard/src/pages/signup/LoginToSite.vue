@@ -20,8 +20,8 @@
 							<p>It looks like something went wrong!</p>
 							<p class="">
 								Contact
-								<a href="mailto:support@frappe.io" class="underline">
-									support@frappe.io
+								<a href="mailto:support@easytouch.cloud" class="underline">
+									support@easytouch.cloud
 								</a>
 								to resolve the issue
 							</p>

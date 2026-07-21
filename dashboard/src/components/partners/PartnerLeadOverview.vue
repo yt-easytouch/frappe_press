@@ -285,6 +285,11 @@ export default {
 					value: this.lead?.is_starter_pack,
 					condition: this.lead?.is_starter_pack !== undefined,
 				},
+				{
+					label: 'Plan Type',
+					value: this.lead?.is_starter_pack,
+					condition: this.lead?.is_starter_pack !== undefined,
+				},
 			].filter((d) => d.condition ?? true);
 		},
 		contact_info() {

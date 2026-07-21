@@ -229,6 +229,9 @@
 		"lets_encrypt_section",
 		"certbot_directory",
 		"webroot_directory",
+		"acme_sh_path",
+		"dns_20i_bearer",
+		"challenge_alias",
 		"rsa_key_size",
 		"column_break_15",
 		"eff_registration_email",
@@ -289,6 +292,8 @@
 		"hybrid_cluster",
 		"hybrid_domain",
 		"tls_renewal_queue_size",
+		"code_spaces_tab",
+		"spaces_domain",
 		"security_tab",
 		"wazuh_server",
 		"wazuh_api_url",
@@ -986,6 +991,21 @@
 			"label": "Webroot Directory"
 		},
 		{
+			"fieldname": "acme_sh_path",
+			"fieldtype": "Data",
+			"label": "ACME.sh Path"
+		},
+		{
+			"fieldname": "dns_20i_bearer",
+			"fieldtype": "Password",
+			"label": "20i Bearer Token"
+		},
+		{
+			"fieldname": "challenge_alias",
+			"fieldtype": "Data",
+			"label": "Challenge Alias"
+		},
+		{
 			"default": "2048",
 			"fieldname": "rsa_key_size",
 			"fieldtype": "Select",
@@ -1307,6 +1327,17 @@
 			"fieldname": "tls_renewal_queue_size",
 			"fieldtype": "Int",
 			"label": "TLS Renewal Queue Size"
+		},
+		{
+			"fieldname": "code_spaces_tab",
+			"fieldtype": "Tab Break",
+			"label": "Code Spaces"
+		},
+		{
+			"fieldname": "spaces_domain",
+			"fieldtype": "Link",
+			"label": "Spaces Domain",
+			"options": "Root Domain"
 		},
 		{
 			"default": "80",

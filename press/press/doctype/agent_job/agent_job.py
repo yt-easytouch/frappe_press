@@ -1336,3 +1336,29 @@ def agent_poll_count_stats_daily():
 	start_time = frappe.utils.add_to_date(None, hours=-24)
 	end_time = frappe.utils.add_to_date(None, minutes=-1)
 	agent_poll_count_stats(start_time, end_time, min_count, duration)
+@frappe.whitelist()
+def poll_pending_jobsapi():
+	# conn = http.client.HTTPSConnection("webhook.site")
+	# payload = ''
+	# headers = {}
+	# conn.request("GET", "/40041d03-c78a-4f78-9241-7c59b6c8556c?api=api", payload, headers)
+	# res = conn.getresponse()
+	# data = res.read()
+	servers = frappe.get_all(
+		"Agent Job",
+		fields=["server", "server_type"],
+		filters={"status": ("in", ["Pending", "Running", "Undelivered"])},
+		group_by="server",
+		order_by="",
+		ignore_ifnull=True,
+	)
+
+	for server in servers:
+		frappe.enqueue(
+			"press.press.doctype.agent_job.agent_job.poll_pending_jobs_server",
+			queue="short",
+			server=server,
+			job_id=f"poll_pending_jobs:{server.server}",
+			deduplicate=True,
+		)
+	return servers

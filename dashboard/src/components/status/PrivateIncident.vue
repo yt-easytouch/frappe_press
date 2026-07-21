@@ -223,7 +223,9 @@ const incidents = createResource({
 const incidentCount = createResource({
 	url: 'press.api.incident.get_incident_count',
 	params: {
-		resolved: isHistory.value,
+		filters: {
+			resolved: isHistory.value,
+		},
 	},
 	auto: true,
 });

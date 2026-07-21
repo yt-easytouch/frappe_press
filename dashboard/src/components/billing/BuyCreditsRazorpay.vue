@@ -123,8 +123,8 @@ function processOrder(data) {
 	const options = {
 		key: data.key_id,
 		order_id: data.order_id,
-		name: "Frappe Cloud",
-		image: "https://frappe.io/files/cloud.png",
+		name: 'Easytouch Cloud',
+		image: 'https://my.yool.tech/files/cloud.png',
 		prefill: { email: team.doc?.user },
 		handler: handlePaymentSuccess,
 		theme: { color: "#171717" },

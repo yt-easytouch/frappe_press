@@ -421,6 +421,8 @@ export default {
 				method: 'fetch_database_table_schema',
 				args: {
 					reload,
+					// Only table columns are needed here; skip the slow size scan.
+					include_table_size: false,
 				},
 			});
 		},

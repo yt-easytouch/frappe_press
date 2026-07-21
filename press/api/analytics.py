@@ -964,7 +964,7 @@ def daily_usage(name: str, timezone: str):
 
 	return {
 		"data": [{"value": r.max, "date": r.date} for r in request_data],
-		"plan_limit": get_plan_config(plan)["rate_limit"]["limit"] if plan else 0,
+		"plan_limit": get_plan_config(plan).get("rate_limit", {}).get("limit", 0) if plan else 0,
 	}
 
 
@@ -1382,7 +1382,7 @@ class GenerateReportReports(BackgroundJobGroupByChart):
 def get_usage(site: str, type: str, timezone: str, start: datetime, end: datetime, timegrain: int):
 	log_server = frappe.db.get_single_value("Press Settings", "log_server")
 	if not log_server:
-		return {"datasets": [], "labels": []}
+		return []
 
 	url = f"https://{log_server}/elasticsearch/filebeat-*/_search"
 	password = get_decrypted_password("Log Server", log_server, "kibana_password")
@@ -1425,7 +1425,7 @@ def get_usage(site: str, type: str, timezone: str, start: datetime, end: datetim
 	buckets: list[UsagePoint] = []
 
 	if not response.get("aggregations"):
-		return {"datasets": [], "labels": []}
+		return []
 
 	for bucket in response["aggregations"]["date_histogram"]["buckets"]:
 		buckets.append(

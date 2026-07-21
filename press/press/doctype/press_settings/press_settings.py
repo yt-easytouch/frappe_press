@@ -26,6 +26,7 @@ class PressSettings(Document):
 		from press.press.doctype.app_group.app_group import AppGroup
 		from press.press.doctype.erpnext_app.erpnext_app import ERPNextApp
 
+		acme_sh_path: DF.Data | None
 		agent_github_access_token: DF.Data | None
 		agent_repository_owner: DF.Data | None
 		agent_sentry_dsn: DF.Data | None
@@ -54,6 +55,7 @@ class PressSettings(Document):
 		build_server: DF.Link | None
 		central_migration_server: DF.Link | None
 		certbot_directory: DF.Data
+		challenge_alias: DF.Data | None
 		chat_base_url: DF.Data | None
 		chat_support_end_time: DF.Literal[
 			"1",
@@ -135,6 +137,7 @@ class PressSettings(Document):
 		docker_registry_username: DF.Data | None
 		docker_s3_access_key: DF.Data | None
 		docker_s3_secret_key: DF.Password | None
+		dns_20i_bearer: DF.Password | None
 		domain: DF.Link | None
 		drive_resource_link: DF.Data | None
 		eff_registration_email: DF.Data

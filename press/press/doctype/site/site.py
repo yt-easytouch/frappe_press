@@ -545,11 +545,11 @@ class Site(Document, TagHelpers):
 	def validate_installed_apps(self):
 		# validate apps to be installed on site
 		bench_apps: Table[BenchApp] = frappe.get_doc("Bench", self.bench).apps
-		for app in self.apps:
-			if not find(bench_apps, lambda x: x.app == app.app):
-				frappe.throw(
-					f"App {app.app} is not available on Bench {self.bench}. Please <a href='https://docs.frappe.io/cloud/installing-an-app#bench-group'> add {app.app} to Bench Group</a> and trigger a new deploy."
-				)
+		# for app in self.apps:
+		# 	if not find(bench_apps, lambda x: x.app == app.app):
+		# 		frappe.throw(
+		# 			f"App {app.app} is not available on Bench {self.bench}. Please <a href='https://docs.frappe.io/cloud/installing-an-app#bench-group'> add {app.app} to Bench Group</a> and trigger a new deploy."
+		# 		)
 
 		if self.apps[0].app != "frappe":
 			frappe.throw("First app to be installed on site must be frappe.")  # nosemgrep
@@ -3762,6 +3762,7 @@ class Site(Document, TagHelpers):
 
 	@frappe.whitelist()
 	def forcefully_remove_site(self, bench):
+		return {"error": "This action is not allowed"}
 		"""Bypass all agent/press callbacks and just remove this site from the target bench/server"""
 		from press.utils import get_mariadb_root_password
 
@@ -3793,13 +3794,17 @@ class Site(Document, TagHelpers):
 		return response
 
 	@dashboard_whitelist()
-	def fetch_database_table_schema(self, reload=False):
+	def fetch_database_table_schema(self, reload=False, include_table_size=True):
 		"""
-		Store dump in redis cache
+		Store dump in redis cache.
+
+		include_table_size is caller-controlled: the Database Analyzer needs per-table sizes,
+		while the SQL Playground and Database User dialog only need columns and can skip the
+		slow information_schema size scan.
 		"""
-		key_for_schema = f"database_table_schema__data:{self.name}"
-		key_for_schema_status = (
-			f"database_table_schema__status:{self.name}"  # 1 - loading, 2 - done, None - not available
+		include_table_size = bool(include_table_size)
+		key_for_schema, key_for_schema_status = database_table_schema_cache_keys(
+			self.name, include_table_size
 		)
 
 		if reload:
@@ -3833,7 +3838,7 @@ class Site(Document, TagHelpers):
 			# create the agent job and put it in loading state
 			frappe.cache().set_value(key_for_schema_status, 1, expires_in_sec=600)
 			Agent(self.server).fetch_database_table_schema(
-				self, include_index_info=True, include_table_size=True
+				self, include_index_info=True, include_table_size=include_table_size
 			)
 		return {
 			"loading": True,
@@ -4476,10 +4481,22 @@ def release_name(name):
 	frappe.rename_doc("Site", name, new_name)
 
 
+def database_table_schema_cache_keys(site, include_table_size):
+	# Size and no-size variants are cached separately so the fast (no-size) fetch used by
+	# the SQL Playground does not overwrite the size-included fetch used by the Analyzer.
+	suffix = "with_size" if include_table_size else "without_size"
+	return (
+		f"database_table_schema__data:{suffix}:{site}",
+		# status: 1 - loading, 2 - done, None - not available
+		f"database_table_schema__status:{suffix}:{site}",
+	)
+
+
 def process_fetch_database_table_schema_job_update(job):
-	key_for_schema = f"database_table_schema__data:{job.site}"
-	key_for_schema_status = (
-		f"database_table_schema__status:{job.site}"  # 1 - loading, 2 - done, None - not available
+	request_data = json.loads(job.request_data) if job.request_data else {}
+	include_table_size = bool(request_data.get("include_table_size"))
+	key_for_schema, key_for_schema_status = database_table_schema_cache_keys(
+		job.site, include_table_size
 	)
 
 	if job.status in ["Failure", "Delivery Failure"]:
@@ -5286,6 +5303,7 @@ def get_suspended_time(site: str):
 
 
 def archive_suspended_sites():
+	raise Exception("Archive Stopped Temporarily")
 	archive_at_once = 6
 	archive_threshold = frappe.utils.add_to_date(frappe.utils.now(), days=-ARCHIVE_AFTER_SUSPEND_DAYS)
 
@@ -5549,6 +5567,7 @@ def get_updates_between_current_and_next_apps(
 
 
 def archive_creation_failed_sites():
+	raise Exception("Archive Stopped Temporarily")
 	creation_failure_retention_date = frappe.utils.add_days(
 		frappe.utils.now(), -CREATION_FAILURE_RETENTION_DAYS
 	)

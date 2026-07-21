@@ -178,6 +178,44 @@ class MonitorServer(BaseServer):
 	def reconfigure_monitor_server(self):
 		frappe.enqueue_doc(self.doctype, self.name, "_reconfigure_monitor_server", queue="long", timeout=1200)
 
+	@frappe.whitelist()
+	def push_sites_yml(self):
+		frappe.enqueue_doc(self.doctype, self.name, "_push_sites_yml", queue="long", timeout=300)
+
+	def _push_sites_yml(self):
+		from press.api.monitoring import get_benches
+
+		benches = get_benches()
+		entries = []
+		for bench in benches:
+			targets = [f"https://{site}/api/method/ping" for site in bench.get("sites", [])]
+			if not targets:
+				continue
+			entries.append(
+				{
+					"targets": targets,
+					"labels": {
+						"bench": bench["name"],
+						"cluster": bench.get("cluster", ""),
+						"group": bench.get("group", ""),
+						"server": bench.get("server", ""),
+					},
+				}
+			)
+
+		sites_yml = json.dumps(entries)
+		try:
+			ansible = Ansible(
+				playbook="push_sites_yml.yml",
+				server=self,
+				user=self._ssh_user(),
+				port=self._ssh_port(),
+				variables={"sites_json": sites_yml},
+			)
+			ansible.run()
+		except Exception:
+			log_error("Push Sites YML Exception", server=self.as_dict())
+
 	def _reconfigure_monitor_server(self):
 		settings = frappe.get_single("Press Settings")
 		press_monitoring_password = settings.get_password("press_monitoring_password")

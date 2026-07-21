@@ -13,7 +13,7 @@ def execute():
 			"action": "Suspend Site",
 			"site": ["in", suspended_sites],
 		},
-		fields=["site", "max(creation) as suspended_at"],
+		fields=["site", {"MAX": "creation", "as": "suspended_at"}],
 		group_by="site",
 	)
 

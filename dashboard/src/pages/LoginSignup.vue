@@ -940,7 +940,7 @@ export default {
 					return `Sign up for ${this.saasProduct.title}`;
 				}
 
-				return 'Create your Frappe Cloud account';
+				return 'Create your Easytouch Cloud account';
 			}
 		},
 		subtitle() {
