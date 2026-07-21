@@ -174,7 +174,6 @@ class ReleaseGroup(Document, TagHelpers):
 		query = (
 			query.where(ReleaseGroup.team == frappe.local.team().name)
 			.where(ReleaseGroup.enabled == 1)
-			.where(ReleaseGroup.public == 0)
 			.select(site_count.as_("site_count"), active_benches.as_("active_benches"))
 		)
 
@@ -1956,6 +1955,9 @@ class ReleaseGroup(Document, TagHelpers):
 		new_name = f"{self.title}.archived"
 		self.title = append_number_if_name_exists("Release Group", new_name, "title", separator=".")
 		self.enabled = 0
+		# Skip validation: archiving only disables the group, so a pre-existing app
+		# version mismatch shouldn't block deletion.
+		# self.flags.ignore_validate = True
 		self.save()
 
 	@dashboard_whitelist()
