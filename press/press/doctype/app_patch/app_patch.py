@@ -34,6 +34,7 @@ class AgentPatchConfig(TypedDict):
 
 if typing.TYPE_CHECKING:
 	from press.press.doctype.agent_job.agent_job import AgentJob
+	from press.press.doctype.app_source.app_source import AppSource
 
 
 class AppPatch(Document):
@@ -160,7 +161,8 @@ def create_app_patch(
 	team: str,
 	patch_config: PatchConfig,
 ) -> list[Any | None]:
-	patch = get_patch(patch_config)
+	app_source = frappe.get_doc("Release Group", release_group).get_app_source(app)
+	patch = get_patch(patch_config, app_source)
 	benches = get_benches(release_group, patch_config)
 	patches = []
 
@@ -185,12 +187,84 @@ def create_app_patch(
 	return patches
 
 
-def get_patch(patch_config: PatchConfig) -> str:
+def get_patch(patch_config: PatchConfig, app_source: "AppSource | None" = None) -> str:
 	if patch := patch_config.get("patch"):
 		return patch
 
 	patch_url = patch_config["patch_url"]
-	return requests.get(patch_url).text
+
+	# Private GitHub repos reject anonymous downloads. The github.com web `.patch`
+	# endpoint also ignores API tokens, so download through the authenticated
+	# GitHub API instead when the source belongs to a private installation.
+	if app_source and app_source.github_installation_id and "github.com/" in patch_url:
+		return download_private_github_patch(patch_url, app_source)
+
+	response = requests.get(patch_url)
+	response.raise_for_status()
+	return response.text
+
+
+def download_private_github_patch(patch_url: str, app_source: "AppSource") -> str:
+	api_url = github_patch_api_url(patch_url, app_source)
+	if not api_url:
+		# Not a compare/commit URL we can translate; try the raw URL as-is.
+		response = requests.get(patch_url)
+		response.raise_for_status()
+		return response.text
+
+	headers = {
+		"Authorization": f"token {app_source.get_access_token()}",
+		"Accept": "application/vnd.github.patch",
+	}
+	response = requests.get(api_url, headers=headers)
+	response.raise_for_status()
+	return response.text
+
+
+def get_last_patch_head(release_group: str, app: str) -> str | None:
+	"""Return the head commit of the most recently applied patch for an app."""
+	patch = frappe.db.get_value(
+		"App Patch",
+		{"group": release_group, "app": app},
+		["url", "filename"],
+		order_by="creation desc",
+		as_dict=True,
+	)
+	if not patch:
+		return None
+	# Patches applied via file have no url, but the compare range is kept in the
+	# filename (e.g. "<from>...<head>.patch"), so fall back to it.
+	return parse_patch_head(patch.url or patch.filename or "")
+
+
+def parse_patch_head(reference: str) -> str | None:
+	"""Extract the head commit from a compare/commit patch url or filename."""
+	reference = (reference or "").strip()
+	if "/commit/" in reference:
+		segment = reference.split("/commit/")[-1]
+	elif "..." in reference:
+		segment = reference.split("...")[-1]
+	else:
+		return None
+
+	# A commit hash has no dot or slash; drop any extension or trailing path.
+	head = segment.split(".")[0].split("/")[0].strip()
+	return head or None
+
+
+def github_patch_api_url(patch_url: str, app_source: "AppSource") -> str | None:
+	"""Translate a github.com compare/commit `.patch` URL into its GitHub API URL."""
+	reference = patch_url.strip()
+	for suffix in (".patch", ".diff"):
+		if reference.endswith(suffix):
+			reference = reference[: -len(suffix)]
+
+	api_base = f"https://api.github.com/repos/{app_source.repository_owner}/{app_source.repository}"
+	if "/compare/" in reference:
+		return f"{api_base}/compare/{reference.split('/compare/')[-1]}"
+	if "/commit/" in reference:
+		return f"{api_base}/commits/{reference.split('/commit/')[-1]}"
+	return None
 
 
 def get_benches(release_group: str, patch_config: PatchConfig) -> list[str]:

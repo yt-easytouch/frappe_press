@@ -1142,6 +1142,14 @@ def apply_patch(release_group: str, app: str, patch_config: dict) -> list[str]:
 
 @frappe.whitelist()
 @protected("Release Group")
+def last_patch_head(name: str, app: str) -> str | None:
+	from press.press.doctype.app_patch.app_patch import get_last_patch_head
+
+	return get_last_patch_head(name, app)
+
+
+@frappe.whitelist()
+@protected("Release Group")
 def fail_build(dn: str):
 	failed = fail_remote_job(dn)
 

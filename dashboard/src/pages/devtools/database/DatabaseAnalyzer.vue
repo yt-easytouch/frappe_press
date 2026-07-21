@@ -507,6 +507,8 @@ export default {
 						method: 'fetch_database_table_schema',
 						args: {
 							reload: this.forceSchemaRefresh,
+							// Analyzer needs per-table sizes for the size breakup.
+							include_table_size: true,
 						},
 					};
 				},
