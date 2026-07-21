@@ -3775,13 +3775,17 @@ class Site(Document, TagHelpers):
 		return response
 
 	@dashboard_whitelist()
-	def fetch_database_table_schema(self, reload=False):
+	def fetch_database_table_schema(self, reload=False, include_table_size=True):
 		"""
-		Store dump in redis cache
+		Store dump in redis cache.
+
+		include_table_size is caller-controlled: the Database Analyzer needs per-table sizes,
+		while the SQL Playground and Database User dialog only need columns and can skip the
+		slow information_schema size scan.
 		"""
-		key_for_schema = f"database_table_schema__data:{self.name}"
-		key_for_schema_status = (
-			f"database_table_schema__status:{self.name}"  # 1 - loading, 2 - done, None - not available
+		include_table_size = bool(include_table_size)
+		key_for_schema, key_for_schema_status = database_table_schema_cache_keys(
+			self.name, include_table_size
 		)
 
 		if reload:
@@ -3815,7 +3819,7 @@ class Site(Document, TagHelpers):
 			# create the agent job and put it in loading state
 			frappe.cache().set_value(key_for_schema_status, 1, expires_in_sec=600)
 			Agent(self.server).fetch_database_table_schema(
-				self, include_index_info=True, include_table_size=True
+				self, include_index_info=True, include_table_size=include_table_size
 			)
 		return {
 			"loading": True,
@@ -4458,10 +4462,22 @@ def release_name(name):
 	frappe.rename_doc("Site", name, new_name)
 
 
+def database_table_schema_cache_keys(site, include_table_size):
+	# Size and no-size variants are cached separately so the fast (no-size) fetch used by
+	# the SQL Playground does not overwrite the size-included fetch used by the Analyzer.
+	suffix = "with_size" if include_table_size else "without_size"
+	return (
+		f"database_table_schema__data:{suffix}:{site}",
+		# status: 1 - loading, 2 - done, None - not available
+		f"database_table_schema__status:{suffix}:{site}",
+	)
+
+
 def process_fetch_database_table_schema_job_update(job):
-	key_for_schema = f"database_table_schema__data:{job.site}"
-	key_for_schema_status = (
-		f"database_table_schema__status:{job.site}"  # 1 - loading, 2 - done, None - not available
+	request_data = json.loads(job.request_data) if job.request_data else {}
+	include_table_size = bool(request_data.get("include_table_size"))
+	key_for_schema, key_for_schema_status = database_table_schema_cache_keys(
+		job.site, include_table_size
 	)
 
 	if job.status in ["Failure", "Delivery Failure"]:

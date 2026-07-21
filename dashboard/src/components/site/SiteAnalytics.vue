@@ -533,7 +533,7 @@ export default {
 		// Initialize date range from URL if present
 		const start = dayjs(this.$route.query.start)
 		const end = dayjs(this.$route.query.end)
-		if (start.isValid && end.isValid && start.isBefore(end)) {
+		if (start.isValid() && end.isValid() && start.isBefore(end)) {
 			this.updateStartDate(start)
 			this.updateEndDate(end)
 		} else {
@@ -942,17 +942,17 @@ export default {
 			if (!['card', 'global'].includes(context))
 				throw new Error('Invalid share context')
 
+			const url = new URL(
+				window.location.origin + window.location.pathname,
+			)
+			url.searchParams.set('start', this.inputStartDate?.toISOString())
+			url.searchParams.set('end', this.inputEndDate?.toISOString())
+
 			if (context === 'card') {
-				const url = new URL(
-					`${window.location.href}?start=${this.inputStartDate}&end=${this.inputEndDate}`,
-				)
 				url.hash = `#${evt}`
 				navigator.clipboard?.writeText(url.toString())
 				toast.success('Card link copied to clipboard!')
 			} else if (context === 'global') {
-				const url = new URL(
-					`${window.location.href}?start=${this.inputStartDate}&end=${this.inputEndDate}`,
-				)
 				navigator.clipboard?.writeText(url.toString())
 				toast.success('Dashboard link copied to clipboard!')
 			}

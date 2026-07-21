@@ -15,8 +15,48 @@
 						placeholder="Select app to patch"
 						type="select"
 						variant="outline"
-						:options="$resources.apps.data"
+						:options="appOptions"
 					/>
+
+					<!-- From / To commit selector -->
+					<div v-if="commitOptions.length > 1" class="flex flex-col gap-2">
+						<div class="grid grid-cols-2 gap-2">
+							<FormControl
+								label="From"
+								type="select"
+								variant="outline"
+								v-model="fromHash"
+								:options="commitOptions"
+							/>
+							<FormControl
+								label="To"
+								type="select"
+								variant="outline"
+								v-model="toHash"
+								:options="commitOptions"
+							/>
+						</div>
+						<div v-if="fromHash && toHash" class="flex gap-2">
+							<Button
+								class="flex-1"
+								label="View compare"
+								@click="openCompare(false)"
+							>
+								<template #prefix>
+									<FeatherIcon name="external-link" class="h-4 w-4" />
+								</template>
+							</Button>
+							<Button
+								class="flex-1"
+								label="View .patch"
+								@click="openCompare(true)"
+							>
+								<template #prefix>
+									<FeatherIcon name="external-link" class="h-4 w-4" />
+								</template>
+							</Button>
+						</div>
+					</div>
 
 					<!-- Patch Selector (URL or File) -->
 					<div class="flex w-full items-end gap-1">
@@ -68,7 +108,7 @@
 					label="Select bench"
 					type="select"
 					variant="outline"
-					:options="$resources.benches.data"
+					:options="benchList"
 				/>
 				<FormControl
 					v-if="!applyToLatestDeploy"
@@ -94,7 +134,7 @@
 				variant="solid"
 				class="w-full"
 				@click="applyPatch"
-				:loading="$resources.applyPatch.loading"
+				:loading="applying"
 			>
 				Apply Patch
 			</Button>
@@ -104,6 +144,7 @@
 <script>
 import {
 	Button,
+	call,
 	Dialog,
 	ErrorMessage,
 	FeatherIcon,
@@ -138,6 +179,20 @@ export default {
 
 			setTimeout(this.clearApp, 150);
 		},
+		selectedApp() {
+			// Reset the from/to selection and default From to the current commit,
+			// then upgrade it to the last patched commit if there is one.
+			this.lastPatchHead = '';
+			this.fromHash = this.selectedAppInfo?.current_hash || '';
+			this.toHash = '';
+			this.fetchLastPatchHead();
+		},
+		comparePatchUrl(value) {
+			// Keep the Patch URL in sync with the selected commit range
+			if (value) {
+				this.patchURL = value;
+			}
+		},
 	},
 	data() {
 		return {
@@ -148,10 +203,20 @@ export default {
 			patchFileName: '',
 			buildAssets: false,
 			applyToApp: '',
+			fromHash: '',
+			toHash: '',
 			applyToBench: '',
 			applyToAllBenches: false,
 			applyToLatestDeploy: false,
+			deployApps: [],
+			benchList: [],
+			applying: false,
+			lastPatchHead: '',
 		};
+	},
+	created() {
+		this.fetchApps();
+		this.fetchBenches();
 	},
 	computed: {
 		title() {
@@ -162,13 +227,110 @@ export default {
 
 			return 'Apply a patch';
 		},
+		selectedApp() {
+			return this.app || this.applyToApp;
+		},
+		appOptions() {
+			return this.deployApps.map((app) => ({
+				value: app.app,
+				label: app.title || app.app,
+			}));
+		},
+		selectedAppInfo() {
+			const apps = this.deployApps;
+			const key = this.selectedApp;
+			// The selected identifier may be the app name, title, or source
+			// depending on where the dialog was opened from, so match on any.
+			return (
+				apps.find(
+					(app) =>
+						app.name === key || app.app === key || app.title === key,
+				) || null
+			);
+		},
+		commitOptions() {
+			const app = this.selectedAppInfo;
+			if (!app) {
+				return [];
+			}
+
+			const options = [{ label: 'Select commit', value: '' }];
+			if (app.current_hash) {
+				options.push({
+					label: `Current (${app.current_hash.slice(0, 7)})`,
+					value: app.current_hash,
+				});
+			}
+
+			// deploy_information returns releases newest-first; show them oldest-first
+			// (chronological, like GitHub's compare view) so From→To reads naturally.
+			for (const release of [...(app.releases || [])].reverse()) {
+				if (!release.hash) {
+					continue;
+				}
+				const message = (release.message || '').split('\n')[0].slice(0, 60);
+				const label = release.tag
+					? `${release.tag} (${release.hash.slice(0, 7)})`
+					: `${release.hash.slice(0, 7)}${message ? ` - ${message}` : ''}`;
+				options.push({ label, value: release.hash });
+			}
+
+			// Ensure the last patched commit is selectable even if it isn't a
+			// tracked release, so the From default can point at it.
+			if (
+				this.lastPatchHead &&
+				!options.some((option) => option.value === this.lastPatchHead)
+			) {
+				options.push({
+					label: `Last patch (${this.lastPatchHead.slice(0, 7)})`,
+					value: this.lastPatchHead,
+				});
+			}
+
+			return options;
+		},
+		comparePageUrl() {
+			const app = this.selectedAppInfo;
+			if (!app?.repository_url || !this.fromHash || !this.toHash) {
+				return '';
+			}
+			return `${app.repository_url}/compare/${this.fromHash}...${this.toHash}`;
+		},
+		comparePatchUrl() {
+			return this.comparePageUrl ? `${this.comparePageUrl}.patch` : '';
+		},
 	},
 	methods: {
 		clearApp() {
 			this.$emit('clear-app-to-patch');
 		},
+		openCompare(asPatch) {
+			const url = asPatch ? this.comparePatchUrl : this.comparePageUrl;
+			if (url) {
+				window.open(url, '_blank');
+			}
+		},
+		async fetchLastPatchHead() {
+			const app = this.selectedApp;
+			if (!app) {
+				return;
+			}
+			try {
+				const head = await call('press.api.bench.last_patch_head', {
+					name: this.group,
+					app,
+				});
+				// Ignore if the user switched apps while the request was in flight
+				if (head && this.selectedApp === app) {
+					this.lastPatchHead = head;
+					this.fromHash = head;
+				}
+			} catch (e) {
+				// Non-critical: fall back to the current-commit default
+			}
+		},
 		validate() {
-			if (!this.$resources.benches.data.length) {
+			if (!this.benchList.length) {
 				this.error =
 					'This group has no benches, patch cannot be applied.';
 				return false;
@@ -207,7 +369,44 @@ export default {
 
 			return true;
 		},
-		applyPatch() {
+		async fetchApps() {
+			try {
+				const info = await call('press.api.bench.deploy_information', {
+					name: this.group,
+				});
+				this.deployApps = info?.apps || [];
+				if (!this.applyToApp && this.deployApps.length === 1) {
+					this.applyToApp = this.deployApps[0].app;
+				}
+				if (!this.fromHash && this.selectedAppInfo?.current_hash) {
+					this.fromHash = this.selectedAppInfo.current_hash;
+				}
+			} catch (e) {
+				this.error = 'Could not load the app list. Please try again.';
+			}
+		},
+		async fetchBenches() {
+			try {
+				const benches = await call('press.api.client.get_list', {
+					doctype: 'Bench',
+					fields: ['name'],
+					filters: { group: this.group, status: 'Active' },
+					limit_page_length: 0,
+				});
+				this.benchList = (benches || []).map((row) => ({
+					value: row.name,
+					label: row.name,
+				}));
+				if (this.benchList.length) {
+					this.applyToBench = this.benchList.at(-1).value;
+				} else {
+					this.error = 'This group has no benches, patch cannot be applied.';
+				}
+			} catch (e) {
+				this.error = 'Could not load benches. Please try again.';
+			}
+		},
+		async applyPatch() {
 			if (!this.validate()) {
 				return;
 			}
@@ -222,21 +421,33 @@ export default {
 			}
 
 			const app = this.app || this.applyToApp;
-			const args = {
-				release_group: this.group,
-				app,
-				patch_config: {
-					patch: this.patch,
-					filename: this.patchFileName,
-					patch_url: this.patchURL,
-					build_assets: this.buildAssets,
-					patch_bench: this.applyToBench,
-					patch_all_benches: this.applyToAllBenches,
-					patch_latest_deploy: this.applyToLatestDeploy,
-				},
-			};
-
-			this.$resources.applyPatch.submit(args);
+			this.applying = true;
+			try {
+				await call('press.api.bench.apply_patch', {
+					release_group: this.group,
+					app,
+					patch_config: {
+						patch: this.patch,
+						filename: this.patchFileName,
+						patch_url: this.patchURL,
+						build_assets: this.buildAssets,
+						patch_bench: this.applyToBench,
+						patch_all_benches: this.applyToAllBenches,
+						patch_latest_deploy: this.applyToLatestDeploy,
+					},
+				});
+				this.close();
+				this.$router.push({
+					name: 'Release Group Detail Jobs',
+					params: { name: this.group },
+				});
+			} catch (error) {
+				this.error = error?.messages?.length
+					? error.messages.join('\n')
+					: error.message || 'Could not apply the patch.';
+			} finally {
+				this.applying = false;
+			}
 		},
 		async onPatchFileSelect(e) {
 			this.error = '';
@@ -256,77 +467,6 @@ export default {
 		close() {
 			this.show = false;
 			this.clear();
-		},
-	},
-	resources: {
-		apps() {
-			return {
-				type: 'list',
-				doctype: 'Release Group App',
-				parent: 'Release Group',
-				auto: true,
-				filters: {
-					parenttype: 'Release Group',
-					parent: this.group,
-				},
-				onSuccess(data) {
-					if (data.length === 1) {
-						this.applyToApp = data[0].value;
-					}
-				},
-				onError(data) {
-					this.error = data;
-				},
-				transform(data) {
-					return data.map(({ name }) => ({ value: name, label: name }));
-				},
-			};
-		},
-		benches() {
-			return {
-				type: 'list',
-				doctype: 'Bench',
-				fields: ['name'],
-				filters: {
-					group: this.group,
-					status: 'Active',
-				},
-				auto: true,
-				onSuccess(data) {
-					if (data.length > 0) {
-						this.applyToBench = data.at(-1).value;
-						return;
-					}
-
-					this.error =
-						'This group has no benches, patch cannot be applied.';
-				},
-				onError(data) {
-					this.error = data;
-				},
-				transform(data) {
-					return data.map(({ name }) => ({ value: name, label: name }));
-				},
-			};
-		},
-		applyPatch() {
-			return {
-				url: 'press.api.bench.apply_patch',
-				onSuccess() {
-					this.close();
-					this.$router.push({
-						name: 'Release Group Detail Jobs',
-						params: { name: this.group },
-					});
-				},
-				onError(error) {
-					if (error.messages.length) {
-						this.error = error.messages.join('\n');
-					} else {
-						this.error = error.message;
-					}
-				},
-			};
 		},
 	},
 };

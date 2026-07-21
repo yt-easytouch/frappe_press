@@ -1,0 +1,19 @@
+---
+- name: Push Sites File SD to Monitor Server
+  hosts: all
+  become: yes
+  become_user: root
+  gather_facts: no
+  tasks:
+    - name: Write sites.yml for Prometheus file_sd
+      become: yes
+      become_user: frappe
+      copy:
+        content: "{{ sites_json | from_json | to_nice_yaml }}"
+        dest: /home/frappe/prometheus/file_sd/sites.yml
+        mode: '0600'
+
+    - name: Reload Prometheus to pick up new targets
+      systemd:
+        name: prometheus
+        state: reloaded
