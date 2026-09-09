@@ -19,16 +19,26 @@ def execute():
 		print(f"No monitor server set. Skipping {DISK_FULL_ALERT}. Create it by hand once one is set up.")
 		return
 
-	frappe.get_doc(
-		{
-			"doctype": "Prometheus Alert Rule",
-			"name": DISK_FULL_ALERT,
-			"enabled": True,
-			"severity": "Critical",
-			"description": "Disk is almost full on {{ $labels.instance }} ({{ $labels.mountpoint }})",
-			"expression": EXPRESSION,
-			"for": "5m",
-			# per instance, so one server recovering resolves only its own banner
-			"group_by": '["alertname", "instance"]',
-		}
-	).insert()
+	try:
+		frappe.get_doc(
+			{
+				"doctype": "Prometheus Alert Rule",
+				"name": DISK_FULL_ALERT,
+				"enabled": True,
+				"severity": "Critical",
+				"description": "Disk is almost full on {{ $labels.instance }} ({{ $labels.mountpoint }})",
+				"expression": EXPRESSION,
+				"for": "5m",
+				# per instance, so one server recovering resolves only its own banner
+				"group_by": '["alertname", "instance"]',
+			}
+		).insert()
+	except Exception:
+		# Saving pushes the rule set to the monitor server over the network; an
+		# unreachable monitor server shouldn't leave the site stuck mid-migration.
+		frappe.db.rollback()
+		frappe.log_error(f"Could not push {DISK_FULL_ALERT} to the monitor server")
+		print(
+			f"Could not reach the monitor server to create {DISK_FULL_ALERT}. "
+			"Create it by hand once it's reachable."
+		)
