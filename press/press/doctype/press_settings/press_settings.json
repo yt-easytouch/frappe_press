@@ -205,6 +205,7 @@
 		"raven_url",
 		"column_break_pqic",
 		"raven_secret_access_key",
+		"raven_incidents_channel",
 		"marketplace_tab",
 		"marketplace_settings_section",
 		"max_allowed_screenshots",
@@ -264,6 +265,7 @@
 		"realtime_job_updates",
 		"disable_agent_job_deduplication",
 		"disable_binlog_indexer_service",
+		"disable_database_audit_service",
 		"enable_mcp",
 		"column_break_rdlr",
 		"disable_auto_retry",
@@ -1688,6 +1690,12 @@
 			"label": "Disable Binlog Indexer Service"
 		},
 		{
+			"default": "0",
+			"fieldname": "disable_database_audit_service",
+			"fieldtype": "Check",
+			"label": "Disable Database Audit Service"
+		},
+		{
 			"fieldname": "default_server_plan_type",
 			"fieldtype": "Link",
 			"label": "Default Server Plan Type",
@@ -1909,6 +1917,12 @@
 			"fieldname": "raven_secret_access_key",
 			"fieldtype": "Password",
 			"label": "Raven Secret Access Key"
+		},
+		{
+			"description": "Channel ID of the Raven channel incident alerts are posted to",
+			"fieldname": "raven_incidents_channel",
+			"fieldtype": "Data",
+			"label": "Raven Incidents Channel"
 		}
 	],
 	"issingle": 1,

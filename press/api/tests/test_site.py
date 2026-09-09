@@ -743,7 +743,7 @@ erpnext 0.8.3	    HEAD
 		self.assertEqual(site.status, "Active")
 
 	def test_version_upgrade_api_upgrades_site(self):
-		from press.api.site import get_private_groups_for_upgrade, version_upgrade
+		from press.api.version_upgrade import version_upgrade
 		from press.press.doctype.site_update.site_update import process_update_site_job_update
 
 		app = create_test_app()
@@ -770,13 +770,6 @@ erpnext 0.8.3	    HEAD
 		v14_bench = create_test_bench(group=v14_group, server=server.name)
 		create_test_bench(group=v15_group, server=server.name)
 		site = create_test_site(bench=v14_bench.name)
-
-		self.assertEqual(
-			get_private_groups_for_upgrade(site.name, v14_group.version),
-			[
-				{"name": v15_group.name, "title": v15_group.title},
-			],
-		)
 
 		with fake_agent_job(
 			"Update Site Migrate",
@@ -868,8 +861,90 @@ erpnext 0.8.3	    HEAD
 	def test_update_config(self):
 		pass
 
-	def test_get_upload_link(self):
-		pass
+	def test_uploaded_backup_info_rejects_path_outside_team_prefix(self):
+		from press.api.site import uploaded_backup_info
+		from press.press.doctype.remote_file.remote_file import get_team_prefix
+
+		frappe.db.set_single_value("Press Settings", "remote_uploads_bucket", "test-remote-uploads")
+		frappe.set_user(self.team.user)
+
+		with self.assertRaises(frappe.PermissionError) as context:
+			uploaded_backup_info(
+				file="database.sql.gz",
+				path=f"{get_team_prefix('victim@example.com')}/1_2/database.sql.gz",
+				type="application/x-gzip",
+				size=1024,
+			)
+
+		self.assertIn("is not under this team's upload prefix", str(context.exception))
+
+	def test_uploaded_backup_info_accepts_path_under_own_prefix(self):
+		from press.api.site import uploaded_backup_info
+		from press.press.doctype.remote_file.remote_file import get_team_prefix
+
+		frappe.db.set_single_value("Press Settings", "remote_uploads_bucket", "test-remote-uploads")
+		frappe.set_user(self.team.user)
+
+		file_path = f"{get_team_prefix(self.team.name)}/1_2/database.sql.gz"
+		name = uploaded_backup_info(
+			file="database.sql.gz", path=file_path, type="application/x-gzip", size=1024
+		)
+
+		self.assertEqual(frappe.db.get_value("Remote File", name, "file_path"), file_path)
+
+	def test_new_site_rejects_backup_of_another_team_for_dashboard_user(self):
+		from press.api.site import validate_files_for_new_site
+
+		other_team = create_test_press_admin_team()
+		remote_file = create_test_remote_file(file_path="somewhere/database.sql.gz")
+		frappe.db.set_value("Remote File", remote_file.name, "team", other_team.name)
+
+		frappe.set_user(self.team.user)
+		with self.assertRaises(frappe.PermissionError) as context:
+			validate_files_for_new_site({"database": remote_file.name}, self.team.name)
+
+		self.assertIn("does not belong to site's team", str(context.exception))
+
+	def test_new_site_allows_backup_of_another_team_for_system_user(self):
+		"""Site Replication runs from desk, under the operator's own team."""
+		from press.api.site import validate_files_for_new_site
+
+		other_team = create_test_press_admin_team()
+		remote_file = create_test_remote_file(file_path="somewhere/database.sql.gz")
+		frappe.db.set_value("Remote File", remote_file.name, "team", other_team.name)
+
+		frappe.set_user("Administrator")
+		validate_files_for_new_site({"database": remote_file.name}, self.team.name)
+
+	def test_restore_rejects_remote_file_with_no_team(self):
+		"""A file with no team has no owner to check against."""
+		from press.api.site import restore
+
+		site = create_test_site(team=self.team.name)
+		remote_file = create_test_remote_file(file_path="somewhere/database.sql.gz")
+		frappe.db.set_value("Remote File", remote_file.name, "team", None)
+
+		frappe.set_user(self.team.user)
+		with self.assertRaises(frappe.PermissionError) as context:
+			restore(site.name, {"database": remote_file.name})
+
+		self.assertIn("does not belong to site's team", str(context.exception))
+		self.assertFalse(frappe.db.get_value("Site", site.name, "remote_database_file"))
+
+	def test_restore_rejects_remote_file_of_another_team(self):
+		from press.api.site import restore
+
+		other_team = create_test_press_admin_team()
+		site = create_test_site(team=self.team.name)
+		remote_file = create_test_remote_file(file_path="somewhere/database.sql.gz")
+		frappe.db.set_value("Remote File", remote_file.name, "team", other_team.name)
+
+		frappe.set_user(self.team.user)
+		with self.assertRaises(frappe.PermissionError) as context:
+			restore(site.name, {"database": remote_file.name})
+
+		self.assertIn("does not belong to site's team", str(context.exception))
+		self.assertFalse(frappe.db.get_value("Site", site.name, "remote_database_file"))
 
 	def test_archive_site_job_with_backup_step_failed_and_archive_skipped_doesnt_archive_site(self):
 		site = create_test_site()
@@ -1115,8 +1190,8 @@ class TestAPISiteDomain(FrappeTestCase):
 		self.assertTrue(frappe.db.exists("Site Domain", {"site": site.name, "domain": "example.com"}))
 
 
-class TestCheckWarrantyRestrictions(FrappeTestCase):
-	"""Tests for _check_warranty_restrictions.
+class TestValidateWarrantyChange(FrappeTestCase):
+	"""Tests for _validate_warranty_change.
 
 	Enabling support is gated only by the server quota (it consumes a slot) and is
 	allowed irrespective of the cooldown, so a site can reclaim a free slot any
@@ -1125,7 +1200,7 @@ class TestCheckWarrantyRestrictions(FrappeTestCase):
 	"""
 
 	def _check(self, *, current_supported, new_supported, quota_available=0, cooldown_active=False):
-		from press.api.site import _check_warranty_restrictions
+		from press.api.site import _validate_warranty_change
 
 		now = datetime.datetime.now()
 		next_change = now + datetime.timedelta(days=1) if cooldown_active else now
@@ -1143,7 +1218,7 @@ class TestCheckWarrantyRestrictions(FrappeTestCase):
 				return_value={"available": quota_available},
 			),
 		):
-			_check_warranty_restrictions(
+			_validate_warranty_change(
 				site="test-site.frappe.cloud",
 				server="test-server",
 				new_plan="test-plan",

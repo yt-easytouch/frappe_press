@@ -563,6 +563,11 @@ router.beforeEach(async (to, from, next) => {
 	let hasTeamPrivileges = !!window.default_team
 	let goingToLoginPage = to.matched.some((record) => record.meta.isLoginPage)
 
+	if (isLoggedIn && window.account_disabled) {
+		next(goingToLoginPage ? undefined : { name: 'Login' })
+		return
+	}
+
 	if (isLoggedIn && hasTeamPrivileges) {
 		await waitUntilTeamLoaded()
 		let $team = getTeam()
@@ -649,12 +654,14 @@ router.beforeEach(async (to, from, next) => {
 		if (goingToLoginPage) {
 			if (to.name == 'Signup' && to.query?.product) {
 				next({
-					name: 'SignupSetup',
-					params: { productId: to.query.product },
+					name: 'Quickstart',
+					query: { product: to.query.product },
 				})
+				return
 			}
 			if (to.name == 'Setup Account') {
 				next({ name: 'Team Invite', params: to.params })
+				return
 			}
 			next({ name: defaultRoute })
 		} else {

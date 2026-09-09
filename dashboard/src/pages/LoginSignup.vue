@@ -424,16 +424,39 @@
 						</p>
 					</div>
 				</template>
-				<template v-slot:logo v-if="saasProduct">
-					<div class="flex space-x-2">
-						<img
-							class="inline-block h-[38px] w-[38px] rounded-sm"
-							:src="saasProduct?.logo"
-						/>
-					</div>
-				</template>
+
 			</LoginBox>
 		</div>
+
+		<Dialog
+			v-model="showReactivateAccountDialog"
+			:options="{ title: 'Reactivate Account', size :'sm' }"
+			@close="cancelReactivation"
+		>
+			<template v-slot:body-content>
+				<p class="text-p-base text-ink-gray-7">
+					This account is disabled. Reactivating restores your account and
+					resumes billing.
+				</p>
+				<ErrorMessage
+					class="mt-2"
+					:message="$resources.reactivateAccount.error"
+				/>
+			</template>
+
+			<template v-slot:actions>
+				<div class="flex justify-end gap-2">
+					<Button @click="cancelReactivation">Cancel</Button>
+					<Button
+						variant="solid"
+						:loading="$resources.reactivateAccount.loading"
+						@click="$resources.reactivateAccount.submit()"
+					>
+						Reactivate
+					</Button>
+				</div>
+			</template>
+		</Dialog>
 	</div>
 </template>
 
@@ -444,6 +467,7 @@ import GoogleIcon from '@/components/icons/GoogleIcon.vue';
 import { toast } from 'vue-sonner';
 import { getToastErrorMessage } from '../utils/toast';
 import { h } from 'vue';
+import { call } from 'frappe-ui';
 import CustomToast from '../components/CustomToast.vue';
 
 export default {
@@ -466,6 +490,7 @@ export default {
 			otpResendCountdown: 0,
 			resetPasswordEmailSent: false,
 			on2FARecovery: false,
+			showReactivateAccountDialog: Boolean(window.account_disabled),
 		};
 	},
 	mounted() {
@@ -547,18 +572,12 @@ export default {
 					if (errorMessage.includes('is already registered')) {
 						localStorage.setItem('login_email', this.email);
 
-						if (this.$route.query?.product) {
-							this.$router.push({
-								name: 'Login',
-								query: {
-									redirect: `/dashboard/create-site/${this.$route.query.product}/setup`,
-								},
-							});
-						} else {
-							this.$router.push({
-								name: 'Login',
-							});
-						}
+						this.$router.push({
+							name: 'Login',
+							query: {
+								product: this.$route.query?.product,
+							},
+						});
 					}
 				},
 			};
@@ -665,6 +684,15 @@ export default {
 		is2FAEnabled() {
 			return {
 				url: 'press.api.account.is_2fa_enabled',
+			};
+		},
+		reactivateAccount() {
+			return {
+				url: 'press.api.account.reactivate_account',
+				onSuccess(team) {
+					localStorage.setItem('current_team', team);
+					window.location.href = '/dashboard';
+				},
 			};
 		},
 		verify2FA() {
@@ -843,15 +871,31 @@ export default {
 				},
 			);
 		},
-		afterLogin(res) {
-			let loginRoute = `/dashboard${res.dashboard_route || '/'}`;
-			// If `redirect` is present in query, redirect to that.
+		cancelReactivation() {
+			this.showReactivateAccountDialog = false;
+			this.$session.logoutWithoutReload.submit();
+		},
+		async afterLogin() {
+			localStorage.setItem('login_email', this.email);
+
 			// Restrict redirect to relative paths.
 			const redirect = this.$route.query.redirect;
 			if (redirect && redirect.startsWith('/') && !redirect.startsWith('//')) {
-				loginRoute = redirect;
+				window.location.href = redirect;
+				return;
 			}
-			localStorage.setItem('login_email', this.email);
+			let loginRoute = '/dashboard/';
+			try {
+				const route = await call('press.api.account.get_route_on_login');
+				const product = this.$route.query.product;
+				if (route === '/quickstart' && product) {
+					loginRoute = `/dashboard/quickstart?product=${product}`;
+				} else {
+					loginRoute = `/dashboard${route || '/'}`;
+				}
+			} catch (e) {
+				loginRoute = '/dashboard/';
+			}
 			if (loginRoute.includes('/welcome')) {
 				let separator = loginRoute.includes('?') ? '&' : '?';
 				loginRoute = `${loginRoute}${separator}post_login=1`;
@@ -868,9 +912,6 @@ export default {
 			if (this.$resources.resetPassword.error) {
 				return this.$resources.resetPassword.error;
 			}
-		},
-		saasProduct() {
-			return this.$resources.signupSettings.data?.product_trial;
 		},
 		isLogin() {
 			return this.$route.name == 'Login' && !this.$route.query.forgot;
@@ -942,16 +983,16 @@ export default {
 
 				return 'Create your Easytouch Cloud account';
 			}
+			return 'Signup to your Easytouch Cloud account';
 		},
 		subtitle() {
 			if (this.hasForgotPassword) {
 				return 'Enter your email address to reset your password';
-			} else {
-				if (this.saasProduct) {
-					return `Get started and explore the easiest way to use ${this.saasProduct.title}`;
-				}
+			} else if (this.isLogin) {
 				return 'Get started and explore the easiest way to use all Frappe apps';
 			}
+
+			return 'Hosting platform for Frappe apps';
 		},
 	},
 };

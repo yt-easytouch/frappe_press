@@ -45,6 +45,11 @@ class CreateServerJob(PressJob):
 			self.configure_mariadb_replica()
 			self.start_mariadb_replica()
 
+		# Before set_additional_config, because it reboots the server and
+		# set_additional_config only enqueues its plays (filebeat, cadvisor,
+		# wazuh, ...) - they'd still be running when the reboot lands
+		self.set_docker_mtu_hetzner()
+
 		self.set_additional_config()
 
 		if self.is_fs_server:
@@ -118,14 +123,14 @@ class CreateServerJob(PressJob):
 			return
 
 		max_retries = self.arguments_dict.get("max_volume_creation_retries", 6)
-		if self.kv.get("volume_creation_attempts", 0) >= max_retries:
+		if (self.kv.get("volume_creation_attempts") or 0) >= max_retries:
 			raise Exception(f"Failed to create volume from snapshot after {max_retries} retries")
 
 		is_created = self.virtual_machine_doc.create_data_disk_volume_from_snapshot()
 		if is_created:
 			return
 
-		self.kv.set("volume_creation_attempts", self.kv.get("volume_creation_attempts", 0) + 1)
+		self.kv.set("volume_creation_attempts", self.kv.get("volume_creation_attempts") or 0 + 1)
 		self.defer_current_task()
 
 	@task
@@ -237,6 +242,15 @@ class CreateServerJob(PressJob):
 			server.setup_docker(now=True)
 		elif server.doctype == "Database Server":
 			server.set_mariadb_mount_dependency(now=True)
+
+	@task(queue="long", timeout=1200)
+	def set_docker_mtu_hetzner(self):
+		# The image ships docker on MTU 1500, which breaks traffic over Hetzner's 1450 private network
+		server = self.server_doc
+		if server.provider != "Hetzner" or server.doctype != "Server":
+			return
+
+		server._set_docker_mtu(throw_on_failure=True)
 
 	@task
 	def update_tls_certificate(self):
