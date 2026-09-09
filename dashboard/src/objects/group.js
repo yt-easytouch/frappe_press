@@ -32,21 +32,6 @@ const removeApps = async (releaseGroup, rows) => {
 	}
 }
 
-const removeApps = async (releaseGroup, rows) => {
-	let removed = 0;
-	for (const row of rows) {
-		try {
-			await releaseGroup.removeApp.submit({ app: row.name });
-			removed++;
-		} catch (e) {
-			const detail = e.messages?.length ? e.messages.join(' ') : e.message;
-			throw new Error(
-				`Removed ${removed} of ${rows.length} apps. Failed to remove "${row.title}": ${detail}`,
-			);
-		}
-	}
-}
-
 export default {
 	doctype: 'Release Group',
 	whitelistedMethods: {
