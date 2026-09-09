@@ -1030,8 +1030,9 @@ class Agent:
 					"failure_count": 1,
 				}
 			)
-			is_primary = frappe.db.get_value(self.server_type, self.server, "is_primary")
-			if self.server_type == "Server" and not is_primary:
+			if self.server_type == "Server" and not frappe.db.get_value(
+				self.server_type, self.server, "is_primary"
+			):
 				# Don't create agent request failures for secondary servers
 				# Since we try to connect to them frequently after IP changes
 				return
