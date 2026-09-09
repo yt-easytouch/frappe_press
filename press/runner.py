@@ -1,4 +1,5 @@
 import json
+import os
 import threading
 import typing
 from collections.abc import Callable
@@ -14,6 +15,14 @@ from ansible.executor.task_executor import TaskExecutor
 from ansible.inventory.manager import InventoryManager
 from ansible.module_utils.common.collections import ImmutableDict
 from ansible.parsing.dataloader import DataLoader
+
+# We connect as root and `become` the unprivileged `frappe` user to write agent files
+# (TLS keys, etc.). Root's home is 0700, so `frappe` can't traverse to Ansible's temp
+# file and the chmod/setfacl handoff fails with "Failed to change ownership of the
+# temporary files". Let Ansible fall back to a world-readable temp (a warning, not an
+# error); the file still lands at its final 0600 destination. Set as a process-global
+# env var so it applies in every worker regardless of inventory-var precedence.
+os.environ.setdefault("ANSIBLE_SHELL_ALLOW_WORLD_READABLE_TEMP", "True")
 from ansible.playbook import Playbook
 from ansible.plugins.action.async_status import ActionModule
 from ansible.plugins.callback import CallbackBase
@@ -227,6 +236,14 @@ class Ansible:
 		self.sources = f"{self.host},"
 		self.inventory = InventoryManager(loader=self.loader, sources=self.sources)
 		self.inventory.get_host(self.host).set_variable("ansible_port", port)
+		# We connect as root and `become` the unprivileged `frappe` user to write agent
+		# files (e.g. TLS keys). Root's home is 0700, so `frappe` can't traverse to
+		# Ansible's temp file — the chmod/setfacl handoff fails with "Failed to change
+		# ownership of the temporary files". Let Ansible fall back to a world-readable
+		# temp (a warning, not an error); the file still lands at its final 0600 dest.
+		self.inventory.get_host(self.host).set_variable(
+			"ansible_shell_allow_world_readable_temp", True
+		)
 
 		self.variable_manager = VariableManager(loader=self.loader, inventory=self.inventory)
 

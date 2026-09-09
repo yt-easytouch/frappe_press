@@ -74,6 +74,14 @@ def _change_dns_record(method: str, domain: RootDomain, proxy_server: str, recor
 	if domain.generic_dns_provider:
 		return
 
+	if getattr(domain, "is_twenty_i", False):
+		host = domain.relative_host(record_name)
+		if method == "DELETE":
+			domain.twenty_i.delete_host(domain.name, host, "CNAME")
+		else:
+			domain.twenty_i.upsert_cname(domain.name, host, proxy_server)
+		return
+
 	client = boto3.client(
 		"route53",
 		aws_access_key_id=domain.aws_access_key_id,

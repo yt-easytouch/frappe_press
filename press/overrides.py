@@ -240,3 +240,38 @@ def before_after_migrate():
 	frappe.cache.flushall()
 	if dump:
 		frappe.cache.restore(session_key, 0, dump, replace=True)
+
+
+# --- Fix: orjson can't serialize numbers beyond the 64-bit range ------------
+# frappe.core.doctype.user.user.test_password_strength returns zxcvbn "guesses"
+# which, for a strong password, exceeds 2**63. orjson then raises
+# "Integer exceeds 64-bit range" and the request 500s. We coerce any oversized
+# number in the result to float (which orjson serializes fine). See hooks.py
+# override_whitelisted_methods.
+_MAX_INT64 = 2**63 - 1
+
+
+def _coerce_big_numbers(value):
+	from decimal import Decimal
+
+	if isinstance(value, bool):
+		return value
+	if isinstance(value, int) and abs(value) > _MAX_INT64:
+		return float(value)
+	if isinstance(value, Decimal):
+		return float(value)
+	if isinstance(value, dict):
+		return {key: _coerce_big_numbers(item) for key, item in value.items()}
+	if isinstance(value, (list, tuple)):
+		return [_coerce_big_numbers(item) for item in value]
+	return value
+
+
+@frappe.whitelist()
+def test_password_strength(new_password: str, key=None, old_password=None, user_data=None):
+	from frappe.core.doctype.user.user import test_password_strength as _test_password_strength
+
+	result = _test_password_strength(
+		new_password, key=key, old_password=old_password, user_data=user_data
+	)
+	return _coerce_big_numbers(result)

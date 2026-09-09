@@ -1992,6 +1992,8 @@ class Cluster(Document):
 		kms_key_id: str | None = None,
 		vmi_series: str | None = None,
 		assign_public_ip: bool = True,
+		additional_ssh_keys: str | None = None,
+		hostname_abbreviation: str | None = None,
 	) -> "VirtualMachine":
 		"""Creates a Virtual Machine for the cluster
 		temporary_server: If you are creating a temporary server for some special purpose, set this to True.
@@ -2013,6 +2015,8 @@ class Cluster(Document):
 				"data_disk_snapshot": data_disk_snapshot,
 				"kms_key_id": kms_key_id,
 				"assign_public_ip": assign_public_ip,
+				"additional_ssh_keys": additional_ssh_keys,
+				"hostname_abbreviation": hostname_abbreviation,
 			},
 		).insert()
 
@@ -2119,6 +2123,8 @@ class Cluster(Document):
 		kms_key_id: str | None = None,
 		is_secondary: bool = False,
 		primary: str | None = None,
+		additional_ssh_keys: str | None = None,
+		hostname_abbreviation: str | None = None,
 	) -> tuple[BaseServer | MonitorServer | LogServer, PressJob]:
 		"""Creates a server for the cluster
 
@@ -2169,6 +2175,8 @@ class Cluster(Document):
 			kms_key_id=kms_key_id,
 			vmi_series="f" if is_secondary else None,  # Just use `f` series for secondary servers
 			assign_public_ip=not (doctype in ("Server", "Database Server") and nat_server),
+			additional_ssh_keys=additional_ssh_keys,
+			hostname_abbreviation=hostname_abbreviation,
 		)
 		server: BaseServer | MonitorServer | LogServer | None = None
 		match doctype:

@@ -138,6 +138,8 @@ class VirtualMachine(Document):
 		security_group_id: DF.Data | None
 		series: DF.Literal["n", "f", "m", "c", "p", "e", "r", "u", "t", "nfs", "fs", "nat"]
 		skip_automated_snapshot: DF.Check
+		additional_ssh_keys: DF.SmallText | None
+		hostname_abbreviation: DF.Data | None
 		ssh_key: DF.Link
 		status: DF.Literal["Draft", "Pending", "Running", "Stopped", "Terminated"]
 		subnet_cidr_block: DF.Data | None
@@ -157,10 +159,16 @@ class VirtualMachine(Document):
 
 		return frappe.db.exists("Database Server", {"virtual_machine": self.name})
 
+	@property
+	def hostname_slug(self) -> str:
+		"""The abbreviation used in the hostname — a custom one if set at creation,
+		otherwise the cluster slug (the previous, default behaviour)."""
+		return slug(self.hostname_abbreviation) if self.hostname_abbreviation else slug(self.cluster)
+
 	def autoname(self):
-		series = f"{self.series}-{slug(self.cluster)}.#####"
+		series = f"{self.series}-{self.hostname_slug}.#####"
 		self.index = int(make_autoname(series)[-5:])
-		self.name = f"{self.series}{self.index}-{slug(self.cluster)}.{self.domain}"
+		self.name = f"{self.series}{self.index}-{self.hostname_slug}.{self.domain}"
 
 	def after_insert(self):
 		if self.virtual_machine_image:
@@ -595,6 +603,25 @@ class VirtualMachine(Document):
 		self.save()
 		frappe.db.commit()
 
+	def _hetzner_ssh_key_names(self) -> list[str]:
+		"""The cluster (manager) key plus any additional keys, each ensured to exist on
+		Hetzner. Hetzner injects keys by name at create time, so every name we return
+		must already be uploaded — we upload any that are missing."""
+		names = [self.ssh_key]
+		for name in (self.additional_ssh_keys or "").replace("\n", ",").split(","):
+			name = name.strip()
+			if name and name not in names:
+				names.append(name)
+
+		client = self.client()
+		for name in names:
+			if not client.ssh_keys.get_all(name=name):
+				client.ssh_keys.create(
+					name=name,
+					public_key=frappe.db.get_value("SSH Key", name, "public_key"),
+				)
+		return names
+
 	def _provision_hetzner(self):
 		from hcloud.firewalls.domain import Firewall
 		from hcloud.images.domain import Image
@@ -609,6 +636,8 @@ class VirtualMachine(Document):
 			)
 
 		cluster: Cluster = frappe.get_doc("Cluster", self.cluster)
+
+		ssh_keys = [SSHKey(name=name) for name in self._hetzner_ssh_key_names()]
 
 		server = (
 			self.client()
@@ -625,7 +654,7 @@ class VirtualMachine(Document):
 					enable_ipv4=bool(self.assign_public_ip),
 					enable_ipv6=False,
 				),
-				ssh_keys=[SSHKey(name=self.ssh_key)],
+				ssh_keys=ssh_keys,
 				user_data=self.get_cloud_init() if self.virtual_machine_image else "",
 			)
 			.server
@@ -1214,6 +1243,7 @@ class VirtualMachine(Document):
 					Throughput=volume.throughput,
 				)
 				self.save()
+
 
 	@frappe.whitelist()
 	def sync(self, *args, **kwargs):
@@ -2409,7 +2439,7 @@ class VirtualMachine(Document):
 
 		server_document = {
 			"doctype": "Server",
-			"hostname": f"u{self.index}-{slug(self.cluster)}",
+			"hostname": f"u{self.index}-{self.hostname_slug}",
 			"domain": self.domain,
 			"cluster": self.cluster,
 			"provider": self.cloud_provider,
@@ -2437,7 +2467,7 @@ class VirtualMachine(Document):
 
 		database_server_document = {
 			"doctype": "Database Server",
-			"hostname": f"u{self.index}-{slug(self.cluster)}",
+			"hostname": f"u{self.index}-{self.hostname_slug}",
 			"domain": self.domain,
 			"cluster": self.cluster,
 			"provider": self.cloud_provider,
@@ -2478,7 +2508,7 @@ class VirtualMachine(Document):
 	def create_server(self, is_secondary: bool = False, primary: str | None = None) -> Server:
 		document = {
 			"doctype": "Server",
-			"hostname": f"{self.series}{self.index}-{slug(self.cluster)}",
+			"hostname": f"{self.series}{self.index}-{self.hostname_slug}",
 			"domain": self.domain,
 			"cluster": self.cluster,
 			"provider": self.cloud_provider,
@@ -2506,7 +2536,7 @@ class VirtualMachine(Document):
 	def create_database_server(self) -> DatabaseServer:
 		document = {
 			"doctype": "Database Server",
-			"hostname": f"{self.series}{self.index}-{slug(self.cluster)}",
+			"hostname": f"{self.series}{self.index}-{self.hostname_slug}",
 			"domain": self.domain,
 			"cluster": self.cluster,
 			"provider": self.cloud_provider,
@@ -2547,7 +2577,7 @@ class VirtualMachine(Document):
 	def create_proxy_server(self) -> ProxyServer:
 		document = {
 			"doctype": "Proxy Server",
-			"hostname": f"{self.series}{self.index}-{slug(self.cluster)}",
+			"hostname": f"{self.series}{self.index}-{self.hostname_slug}",
 			"domain": self.domain,
 			"cluster": self.cluster,
 			"provider": self.cloud_provider,
@@ -2567,7 +2597,7 @@ class VirtualMachine(Document):
 	def create_monitor_server(self) -> MonitorServer:
 		document = {
 			"doctype": "Monitor Server",
-			"hostname": f"{self.series}{self.index}-{slug(self.cluster)}",
+			"hostname": f"{self.series}{self.index}-{self.hostname_slug}",
 			"domain": self.domain,
 			"cluster": self.cluster,
 			"provider": self.cloud_provider,
@@ -2585,7 +2615,7 @@ class VirtualMachine(Document):
 	def create_log_server(self) -> LogServer:
 		document = {
 			"doctype": "Log Server",
-			"hostname": f"{self.series}{self.index}-{slug(self.cluster)}",
+			"hostname": f"{self.series}{self.index}-{self.hostname_slug}",
 			"domain": self.domain,
 			"cluster": self.cluster,
 			"provider": self.cloud_provider,
@@ -2603,7 +2633,7 @@ class VirtualMachine(Document):
 	def create_registry_server(self):
 		document = {
 			"doctype": "Registry Server",
-			"hostname": f"{self.series}{self.index}-{slug(self.cluster)}",
+			"hostname": f"{self.series}{self.index}-{self.hostname_slug}",
 			"domain": self.domain,
 			"cluster": self.cluster,
 			"provider": "AWS EC2",
@@ -2626,7 +2656,7 @@ class VirtualMachine(Document):
 
 		document = {
 			"doctype": "NAT Server",
-			"hostname": f"{self.series}{self.index}-{slug(self.cluster)}",
+			"hostname": f"{self.series}{self.index}-{self.hostname_slug}",
 			"domain": self.domain,
 			"cluster": self.cluster,
 			"provider": self.cloud_provider,

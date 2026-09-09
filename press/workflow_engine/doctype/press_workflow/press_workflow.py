@@ -45,7 +45,7 @@ class PressWorkflow(Document):
 		from press.workflow_engine.doctype.press_workflow_kv.press_workflow_kv import PressWorkflowKV
 		from press.workflow_engine.doctype.press_workflow_step.press_workflow_step import PressWorkflowStep
 
-		args: DF.Data | None
+		args: DF.LongText | None
 		args_type: DF.Literal["int", "float", "string", "tuple", "list", "dict", "object"]
 		callback_next_retry_at: DF.Datetime | None
 		callback_status: DF.Literal["Pending", "Success", "Failure", "Fatal"]
@@ -55,7 +55,7 @@ class PressWorkflow(Document):
 		exception: DF.Link | None
 		is_force_failure_requested: DF.Check
 		key_value_store: DF.Table[PressWorkflowKV]
-		kwargs: DF.Data | None
+		kwargs: DF.LongText | None
 		kwargs_type: DF.Literal["int", "float", "string", "tuple", "list", "dict", "object"]
 		linked_docname: DF.DynamicLink
 		linked_doctype: DF.Link
@@ -63,7 +63,7 @@ class PressWorkflow(Document):
 		main_method_title: DF.Data
 		max_no_of_callback_attempts: DF.Int
 		no_of_callback_attempts: DF.Int
-		output: DF.Data | None
+		output: DF.LongText | None
 		output_type: DF.Literal[None]
 		start: DF.Datetime | None
 		status: DF.Literal["Queued", "Running", "Success", "Failure", "Fatal"]

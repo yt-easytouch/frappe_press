@@ -74,6 +74,12 @@ frappe.ui.form.on('Proxy Server', {
 					(!frm.doc.frappe_public_key || !frm.doc.root_public_key),
 			],
 			[__('Update TLS Certificate'), 'update_tls_certificate', true],
+			[
+				__('Create DNS Record'),
+				'create_dns_record',
+				true,
+				frm.doc.domain && (frm.doc.ip || frm.doc.private_ip),
+			],
 			[__('Reload NGINX'), 'reload_nginx', true, frm.doc.is_server_setup],
 			[__('Create Image'), 'create_image', true, frm.doc.status == 'Active'],
 			[

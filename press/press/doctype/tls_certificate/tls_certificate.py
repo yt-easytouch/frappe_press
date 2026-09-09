@@ -456,6 +456,17 @@ def notify_custom_tls_renewal():
 
 def update_server_tls_certifcate(server, certificate, throw_on_failure: bool = False):
 	try:
+		# tls.yml uses ansible `copy: content:`, which first writes the cert to a
+		# CONTROLLER-local temp file under ~/.ansible/tmp/ansible-local-<pid>/. Press runs
+		# ansible embedded (runner.py), so that dir is bound once per worker PID at import and
+		# never recreated; if it disappears (worker restart, tmp cleanup) TLS fails with
+		# "could not write content temp file: [Errno 2] No such file or directory". Recreate it
+		# before the play runs so a standalone "Update TLS Certificate" click can recover
+		# without a worker restart.
+		from ansible import constants as ansible_constants
+
+		os.makedirs(ansible_constants.DEFAULT_LOCAL_TMP, exist_ok=True)
+
 		proxysql_admin_password = None
 		if server.doctype == "Proxy Server":
 			proxysql_admin_password = server.get_password("proxysql_admin_password")

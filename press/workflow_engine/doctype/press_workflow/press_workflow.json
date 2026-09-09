@@ -90,9 +90,8 @@
 		},
 		{
 			"fieldname": "output",
-			"fieldtype": "Data",
+			"fieldtype": "Long Text",
 			"label": "Output",
-			"length": 1000,
 			"read_only": 1
 		},
 		{
@@ -172,16 +171,14 @@
 		},
 		{
 			"fieldname": "args",
-			"fieldtype": "Data",
+			"fieldtype": "Long Text",
 			"label": "Args",
-			"length": 1000,
 			"set_only_once": 1
 		},
 		{
 			"fieldname": "kwargs",
-			"fieldtype": "Data",
+			"fieldtype": "Long Text",
 			"label": "Kwargs",
-			"length": 1000,
 			"set_only_once": 1
 		},
 		{

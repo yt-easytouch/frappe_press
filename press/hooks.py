@@ -453,7 +453,11 @@ before_tests = "press.tests.before_test.execute"
 # Overriding Methods
 # ------------------------------
 #
-override_whitelisted_methods = {"upload_file": "press.overrides.upload_file"}
+override_whitelisted_methods = {
+	"upload_file": "press.overrides.upload_file",
+	# Strong passwords make zxcvbn "guesses" exceed 64-bit; orjson then 500s.
+	"frappe.core.doctype.user.user.test_password_strength": "press.overrides.test_password_strength",
+}
 #
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,

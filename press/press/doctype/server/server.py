@@ -555,7 +555,8 @@ class BaseServer(Document, TagHelpers):
 
 	def autoname(self):
 		if not self.domain:
-			self.domain = frappe.db.get_single_value("Press Settings", "domain")
+			cluster_domain = frappe.db.get_value("Cluster", self.cluster, "domain") if self.cluster else None
+			self.domain = cluster_domain or frappe.db.get_single_value("Press Settings", "domain")
 		self.name = f"{self.hostname}.{self.domain}"
 		if self.doctype in ["Database Server", "Server", "Proxy Server"] and self.is_self_hosted:
 			self.name = f"{self.hostname}.{self.self_hosted_server_domain}"
@@ -597,6 +598,12 @@ class BaseServer(Document, TagHelpers):
 			domain = frappe.get_doc("Root Domain", self.domain)
 
 			if domain.generic_dns_provider:
+				return
+
+			if getattr(domain, "is_twenty_i", False):
+				domain.twenty_i.upsert_a(
+					domain.name, domain.relative_host(self.name), self.ip or self.private_ip
+				)
 				return
 
 			client = boto3.client(

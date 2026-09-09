@@ -288,13 +288,16 @@ class ProxyServer(BaseServer):
 
 	def _setup_proxysql(self):
 		try:
+			# Smallest server_id among active DB servers in this cluster. Newer Frappe
+			# rejects the "MIN(server_id)" string aggregate, so take the first row
+			# ordered by server_id instead.
 			default_hostgroup = (
-				frappe.get_all(
+				frappe.db.get_value(
 					"Database Server",
-					"MIN(server_id)",
 					{"status": "Active", "cluster": self.cluster},
-					as_list=True,
-				)[0][0]
+					"server_id",
+					order_by="server_id asc",
+				)
 				or 0
 			)
 			ansible = Ansible(

@@ -243,3 +243,16 @@ class IntegrationTestPressWorkflow(FrappeTestCase):
 		with self.assertRaises(PressWorkflowFailedError) as ctx:
 			wf.get_result()
 		self.assertIn("no exception was recorded", str(ctx.exception).lower())
+
+	def test_workflow_with_extremely_large_kwargs(self):
+		# Generate a dictionary with values exceeding 1000 characters
+		large_val = "x" * 5000
+		wf_name = self.doc.flow_with_args.run_as_workflow(x=large_val, y="short")
+		wf = self.get_wf(wf_name)
+		self.assertEqual(wf.status, "Success")
+		
+		# Verify that the value saved in the DB is indeed the long string
+		import json
+		kwargs_dict = json.loads(wf.kwargs)
+		self.assertEqual(kwargs_dict.get("x"), large_val)
+

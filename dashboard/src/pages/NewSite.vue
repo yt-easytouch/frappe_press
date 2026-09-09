@@ -160,8 +160,12 @@
 					/>
 				</div>
 			</div>
+			<!-- Provider selection hidden: customers pick the region instead, and the
+				 provider is inferred from the chosen region via effectiveProvider.
+				 Set v-if to the original condition to bring this step back. -->
 			<div
 				v-if="
+					false &&
 					!this.selectedDedicatedServer &&
 					selectedVersion &&
 					options.providers?.length
@@ -203,8 +207,7 @@
 				v-if="
 					!this.selectedDedicatedServer &&
 					selectedVersion?.group &&
-					filteredClusters.length &&
-					(provider || bench)
+					filteredClusters.length
 				"
 			>
 				<h2 class="text-base font-medium leading-6 text-ink-gray-9">
@@ -660,7 +663,7 @@ export default {
 									? this.selectedLocalisationCountry?.value
 									: null,
 								version: this.selectedVersion.name,
-								provider: this.provider,
+								provider: this.effectiveProvider,
 								group: this.selectedVersion.group.name,
 								cluster: this.cluster,
 								plan: this.plan.name,
