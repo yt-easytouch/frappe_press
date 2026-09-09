@@ -61,8 +61,12 @@ def initialize_webdriver():
 	try:
 		chrome = webdriver.Chrome(service=service, options=options)
 	except WebDriverException as e:
-		version = re.search(r"is (\d+.\d+.\d+.\d+) with", e.msg).group(1)
-		download_chromedriver(version=version)
+		match = re.search(r"is (\d+.\d+.\d+.\d+) with", e.msg)
+		if not match:
+			# Not a version-mismatch error (e.g. Chrome itself isn't installed) —
+			# re-downloading chromedriver won't fix this one.
+			raise
+		download_chromedriver(version=match.group(1))
 		chrome = webdriver.Chrome(service=service, options=options)
 	return True
 
