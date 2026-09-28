@@ -494,6 +494,8 @@ def track_offsite_backups(site: str, backup_data: dict, offsite_backup_data: dic
 						"bucket": bucket,
 					}
 				)
+				# Our offsite and uploads buckets are the same, and agent keys carry no team prefix
+				remote_file.flags.is_offsite_backup = True
 				remote_file.save()
 				add_tag("Offsite Backup", remote_file.doctype, remote_file.name)
 				remote_files[type] = remote_file.name
