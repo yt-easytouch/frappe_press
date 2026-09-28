@@ -125,6 +125,13 @@ const list = computed(() => {
 					isActive: routeName === 'Binlog Browser',
 					condition: $team.doc.is_binlog_indexer_enabled ?? false,
 				},
+				{
+					name: 'Backup Monitor',
+					icon: LucideDatabaseBackup,
+					route: '/backup-monitor',
+					isActive: routeName === 'Backup Monitor',
+					condition: $team.doc.is_desk_user,
+				},
 			].filter((item) => item.condition ?? true),
 
 			isActive: [
@@ -132,6 +139,7 @@ const list = computed(() => {
 				'DB Analyzer',
 				'Log Browser',
 				'Binlog Browser',
+				'Backup Monitor',
 			].includes(routeName),
 		},
 

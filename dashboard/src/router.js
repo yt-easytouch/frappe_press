@@ -554,6 +554,13 @@ let router = createRouter({
 			meta: { title: 'Database Analyzer' },
 		},
 		{
+			path: '/backup-monitor',
+			name: 'Backup Monitor',
+			component: () =>
+				import('./pages/devtools/backup-monitor/BackupMonitor.vue'),
+			meta: { title: 'Backup Monitor' },
+		},
+		{
 			path: '/binlog-browser',
 			name: 'Binlog Browser',
 			component: () => import('./pages/devtools/database/BinlogBrowser.vue'),
