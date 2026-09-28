@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import ipaddress
+import random
 import time
 import typing
 from contextlib import suppress
@@ -3511,11 +3512,9 @@ def snapshot_aws_servers():
 			"series": "f",
 			"disable_server_snapshot": 0,
 		},
-		order_by="RAND()",
 		pluck="name",
-		limit_page_length=50,
 	)
-	for machine in machines:
+	for machine in random.sample(machines, k=min(50, len(machines))):
 		if has_job_timeout_exceeded():
 			return
 		app_server = frappe.get_value("Server", {"virtual_machine": machine}, "name")

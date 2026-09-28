@@ -684,11 +684,9 @@ def fail_old_jobs():
 			"job_id": ("!=", 0),
 			"creation": ("<", add_days(None, -2)),
 		},
-		limit=100,
-		order_by="RAND()",
 		pluck="name",
 	)
-	update_status(failed_jobs, "Failure")
+	update_status(random.sample(failed_jobs, k=min(100, len(failed_jobs))), "Failure")
 
 	delivery_failed_jobs = frappe.db.get_all(
 		"Agent Job",
@@ -697,12 +695,12 @@ def fail_old_jobs():
 			"creation": ("<", add_days(None, -2)),
 			"status": ("!=", "Delivery Failure"),
 		},
-		limit=100,
-		order_by="RAND()",
 		pluck="name",
 	)
 
-	update_status(delivery_failed_jobs, "Delivery Failure")
+	update_status(
+		random.sample(delivery_failed_jobs, k=min(100, len(delivery_failed_jobs))), "Delivery Failure"
+	)
 
 
 def get_pair_jobs():

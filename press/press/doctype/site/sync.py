@@ -1,6 +1,8 @@
 # Copyright (c) 2024, Frappe and contributors
 # For license information, please see license.txt
 
+import random
+
 import frappe
 
 
@@ -14,11 +16,9 @@ def sync_setup_wizard_status():
 			"domain": ("in", ("erpnext.com", "frappe.cloud", "frappehr.com", "frappedesk.com")),
 		},
 		pluck="name",
-		order_by="RAND()",
-		limit=20,
 	)
 
-	for site_name in sites:
+	for site_name in random.sample(sites, k=min(20, len(sites))):
 		site = frappe.get_doc("Site", site_name)
 		try:
 			site.is_setup_wizard_complete()
