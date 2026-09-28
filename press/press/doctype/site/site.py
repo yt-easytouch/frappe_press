@@ -6,6 +6,7 @@ from __future__ import annotations
 import contextlib
 import json
 import math
+import random
 from collections import defaultdict
 from contextlib import suppress
 from datetime import datetime, timedelta
@@ -5586,10 +5587,8 @@ def sync_sites_setup_wizard_complete_status():
 			"team": ("!=", team_name),
 		},
 		pluck="name",
-		order_by="RAND()",
-		limit=100,
 	)
-	for site in sites:
+	for site in random.sample(sites, k=min(100, len(sites))):
 		frappe.enqueue(
 			"press.press.doctype.site.site.fetch_setup_wizard_complete_status_if_site_exists",
 			site=site,
