@@ -153,7 +153,7 @@ const helpDropdownOptions = [
 							</div>
 
 							<div class="text-sm text-left text-ink-gray-7 truncate">
-								{{ $team?.get.loading ? 'Loading...' : $team?.doc?.user }}
+								{{ $team?.get.loading ? 'Loading...' : $team?.doc?.team_label || $team?.doc?.user }}
 							</div>
 						</div>
 
