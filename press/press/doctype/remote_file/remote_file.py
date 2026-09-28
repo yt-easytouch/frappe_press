@@ -219,7 +219,7 @@ class RemoteFile(Document):
 		The path comes from the client, and the restore flow later hands it to
 		the agent as a presigned link.
 		"""
-		if not self.is_new() or not self.file_path:
+		if not self.is_new() or not self.file_path or self.flags.is_offsite_backup:
 			return
 
 		uploads_bucket = frappe.db.get_single_value("Press Settings", "remote_uploads_bucket")

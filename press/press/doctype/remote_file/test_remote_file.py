@@ -152,6 +152,25 @@ class TestRemoteFile(FrappeTestCase):
 
 		self.assertEqual(remote_file.file_path, "/benches/breadshop_database.sql.gz")
 
+	def test_offsite_backup_in_the_uploads_bucket_skips_the_team_prefix_check(self):
+		from press.press.doctype.team.test_team import create_test_team
+
+		team = create_test_team()
+		frappe.db.set_single_value("Press Settings", "remote_uploads_bucket", UPLOADS_BUCKET)
+
+		remote_file = frappe.get_doc(
+			{
+				"doctype": "Remote File",
+				"team": team.name,
+				"bucket": UPLOADS_BUCKET,
+				"file_path": "breadshop.example.com/2026-09-28/breadshop_database.sql.gz",
+			}
+		)
+		remote_file.flags.is_offsite_backup = True
+		remote_file.insert()
+
+		self.assertEqual(remote_file.file_path, "breadshop.example.com/2026-09-28/breadshop_database.sql.gz")
+
 	def test_existing_uploaded_file_can_still_be_saved(self):
 		"""The prefix rule applies on insert only, so old rows stay editable."""
 		from press.press.doctype.team.test_team import create_test_team
