@@ -155,6 +155,8 @@ class Team(Document):
 	dashboard_fields = (
 		"enabled",
 		"team_title",
+		# Custom field on our site; the desk and sidebar show it instead of the user
+		"team_label",
 		"user",
 		"partner_email",
 		"erpnext_partner",
