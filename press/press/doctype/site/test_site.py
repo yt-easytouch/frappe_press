@@ -41,6 +41,7 @@ from press.press.doctype.site.site import (
 	process_rename_site_job_update,
 	suspend_sites_exceeding_disk_usage_for_last_14_days,
 )
+from press.press.doctype.site_activity.site_activity import log_site_activity
 from press.press.doctype.site_migration.site_migration import SiteMigration
 from press.press.doctype.site_plan.test_site_plan import create_test_plan
 from press.press.doctype.team.test_team import create_test_team
@@ -232,9 +233,9 @@ class TestSite(FrappeTestCase):
 		self.assertEqual(site.db_server_restore_space(app, unified_db, db_required=100, app_required=30), 130)
 		self.assertEqual(site.db_server_restore_space(app, split_db, db_required=100, app_required=30), 100)
 
-	def test_has_recent_failed_migration_only_true_for_a_recent_failure(self):
+	def test_recent_failed_migration_servers_lists_only_recent_failure_destinations(self):
 		site = create_test_site("testsubdomain")
-		self.assertFalse(site.has_recent_failed_migration())
+		self.assertEqual(site.recent_failed_migration_servers(), [])
 
 		bench = create_test_bench()
 		with patch.object(SiteMigration, "after_insert"):
@@ -243,12 +244,12 @@ class TestSite(FrappeTestCase):
 			).insert()
 
 		frappe.db.set_value("Site Migration", migration.name, "status", "Failure")
-		self.assertTrue(site.has_recent_failed_migration())
+		self.assertEqual(site.recent_failed_migration_servers(), [bench.server])
 
 		frappe.db.set_value(
 			"Site Migration", migration.name, "creation", frappe.utils.add_to_date(None, days=-2)
 		)
-		self.assertFalse(site.has_recent_failed_migration())
+		self.assertEqual(site.recent_failed_migration_servers(), [])
 
 	def test_site_has_default_site_domain_on_create(self):
 		"""Ensure site has default site domain on create."""
@@ -556,6 +557,17 @@ class TestSite(FrappeTestCase):
 		with patch.object(Server, "free_space", new=Mock(return_value=0)):
 			self.assertRaises(InsufficientSpaceOnServer, site.restore_site)
 
+	@patch.object(BaseServer, "guess_data_disk_mountpoint", new=Mock(return_value="/"))
+	@patch.object(BaseServer, "calculated_increase_disk_size")
+	def test_disk_increase_passes_shortfall_as_positive_whole_gb(self, mock_increase_disk_size: Mock):
+		site = create_test_site()
+		server = frappe.get_doc("Server", site.server)
+		server.public = True
+		gb = 1024 * 1024 * 1024
+		with patch.object(BaseServer, "free_space", new=Mock(return_value=10 * gb)):
+			site.check_and_increase_disk(server, int(13.2 * gb))
+		mock_increase_disk_size.assert_called_once_with(mountpoint="/", additional=4)
+
 	def test_user_cannot_disable_auto_update_if_site_in_public_release_group(self):
 		rg = create_test_release_group([create_test_app()], public=True)
 		bench = create_test_bench(group=rg)
@@ -657,6 +669,35 @@ class TestSite(FrappeTestCase):
 		site_recent.reload()
 		self.assertEqual(site_to_notify_and_archive.status, "Pending")  # site is being archived
 		self.assertEqual(site_recent.status, "Suspended")  # Do not archive recently suspended site
+
+	def test_archival_details_name_the_user_who_archived_the_site_and_the_reason(self):
+		site = create_test_site()
+		activity = log_site_activity(site.name, "Archive", "Not needed anymore")
+		frappe.db.set_value("Site Activity", activity.name, "owner", "jane@example.com")
+
+		details = site.get_archival_details()
+
+		self.assertEqual(details["archived_by"], "jane@example.com")
+		self.assertEqual(details["reason"], "Not needed anymore")
+		self.assertEqual(details["archived_on"], frappe.utils.get_datetime(activity.creation))
+
+	def test_archival_details_credit_frappe_cloud_for_an_archival_run_by_administrator(self):
+		site = create_test_site()
+		log_site_activity(site.name, "Archive", "Archive suspended site")
+
+		self.assertEqual(site.get_archival_details()["archived_by"], "Easytouch Cloud")
+
+	def test_archival_details_keep_the_reason_of_the_first_archive_attempt(self):
+		site = create_test_site()
+		log_site_activity(site.name, "Archive", "Archive suspended site")
+		log_site_activity(site.name, "Archive", "Retry Archive")
+
+		self.assertEqual(site.get_archival_details()["reason"], "Archive suspended site")
+
+	def test_archival_details_are_empty_for_a_site_that_was_never_archived(self):
+		site = create_test_site()
+
+		self.assertIsNone(site.get_archival_details())
 
 	def test_site_usage_exceed_tracking(self):
 		team = create_test_team()
@@ -973,6 +1014,21 @@ class TestSite(FrappeTestCase):
 			frappe.db.count("Agent Job", {"site": site.name, "job_type": "Restore Site Tables"}),
 			1,
 			"The refused restore must not have created a second job",
+		)
+
+	@patch("press.api.server.prometheus_instant_value", new=Mock(return_value=1))
+	@patch.object(
+		Site, "ping", new=Mock(return_value=Mock(status_code=200, json=lambda: {"message": "pong"}))
+	)
+	def test_restore_tables_is_rejected_when_site_responds_to_ping(self):
+		# The user may have activated the site by hand. A restore would overwrite the
+		# data they entered since.
+		site = self._broken_site_with_fatal_update()
+
+		self.assertRaisesRegex(frappe.ValidationError, "may already be active", site.restore_tables)
+		self.assertFalse(
+			frappe.db.exists("Agent Job", {"site": site.name, "job_type": "Restore Site Tables"}),
+			"The refused restore must not have created a job",
 		)
 
 	@patch("press.api.server.prometheus_instant_value", new=Mock(return_value=None))
