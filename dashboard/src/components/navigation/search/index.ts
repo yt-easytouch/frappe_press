@@ -71,6 +71,12 @@ export const index = computed(() => {
 					icon: LucideFileSearch,
 					condition: team.doc?.is_binlog_indexer_enabled ?? false,
 				},
+				{
+					name: 'Backup Monitor',
+					route: '/backup-monitor',
+					icon: LucideDatabaseBackup,
+					condition: team.doc?.is_desk_user,
+				},
 			],
 		},
 
