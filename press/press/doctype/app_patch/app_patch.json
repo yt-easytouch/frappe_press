@@ -70,7 +70,8 @@
 			"depends_on": "eval: doc.url",
 			"fieldname": "url",
 			"fieldtype": "Data",
-			"label": "Patch URL"
+			"label": "Patch URL",
+			"length": 500
 		},
 		{
 			"fieldname": "filename",
@@ -110,7 +111,7 @@
 	],
 	"index_web_pages_for_search": 1,
 	"links": [],
-	"modified": "2025-04-17 11:22:43.781613",
+	"modified": "2026-10-19 15:30:00.000000",
 	"modified_by": "Administrator",
 	"module": "Press",
 	"name": "App Patch",
