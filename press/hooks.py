@@ -76,7 +76,6 @@ website_redirects = [
 	},
 	{"source": "/f-login", "target": "/dashboard/f-login"},
 	{"source": "/signup", "target": "/erpnext/signup"},
-	{"source": "/favicon.ico", "target": "/assets/press/dashboard/favicon.ico"},
 ]
 
 email_css = ["/assets/press/css/email.css"]
