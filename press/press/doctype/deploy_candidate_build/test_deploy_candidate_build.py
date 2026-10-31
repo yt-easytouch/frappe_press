@@ -223,8 +223,11 @@ class TestDeployCandidateBuild(FrappeTestCase):
 		checkpoints = build._get_dockerfile_checkpoints(build._generate_dockerfile())
 		self.assertIn("setup-chromium", checkpoints)
 
-	def generate_dockerfile_with_app_cache(self, public: bool, no_cache: bool = False) -> str:
+	def generate_dockerfile_with_app_cache(
+		self, public: bool, no_cache: bool = False, use_asset_store: bool = True
+	) -> str:
 		frappe.set_user("Administrator")
+		frappe.db.set_single_value("Press Settings", "use_asset_store", use_asset_store)
 		apps = [create_test_app(), create_test_app("erpnext", "ERPNext")]
 		candidate = create_test_deploy_candidate(create_test_release_group(apps, public=public))
 		candidate.db_set("use_app_cache", 1)
@@ -252,6 +255,11 @@ class TestDeployCandidateBuild(FrappeTestCase):
 	def test_no_cache_build_of_a_public_group_skips_the_asset_store(self, _mock_commit):
 		dockerfile = self.generate_dockerfile_with_app_cache(public=True, no_cache=True)
 		self.assertNotIn("get_cached_app.py", dockerfile)
+
+	def test_app_cache_group_installs_apps_with_get_app_when_press_has_no_asset_store(self, _mock_commit):
+		dockerfile = self.generate_dockerfile_with_app_cache(public=False, use_asset_store=False)
+		self.assertNotIn("stored_assets/erpnext", dockerfile)
+		self.assertIn("bench get-app file:///home/frappe/context/apps/erpnext", dockerfile)
 
 	# Saving would insert the build, and after_insert needs a build server
 	@patch.object(DeployCandidateBuild, "save", new=Mock())

@@ -359,6 +359,8 @@ class DeployCandidateBuild(Document):
 
 	def uses_asset_store(self) -> bool:
 		"""Any group with Use App Cache downloads stored assets; only public groups upload them."""
+		if not frappe.db.get_single_value("Press Settings", "use_asset_store"):
+			return False
 		return not self.no_cache and bool(self.candidate.use_app_cache)
 
 	def add_patch_build_steps(self):
