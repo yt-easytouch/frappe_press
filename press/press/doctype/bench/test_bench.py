@@ -1003,3 +1003,39 @@ class TestArchiveObsoleteBenches(FrappeTestCase):
 				)
 
 			self.assertEqual(len(started_bench_execution), 5 + (i * 5))
+
+
+@patch.object(AgentJob, "after_insert", new=Mock())
+class TestMigrateSites(FrappeTestCase):
+	"""The Migrate Sites dialog starts one migrate per chosen site of the bench."""
+
+	def tearDown(self):
+		frappe.db.rollback()
+
+	def migrate_jobs(self, site: str) -> list[dict]:
+		return frappe.get_all(
+			"Agent Job", {"site": site, "job_type": "Migrate Site"}, ["request_data"], order_by="creation"
+		)
+
+	def test_each_chosen_site_gets_a_migrate_job_with_its_own_skip_failing_patches(self):
+		first = create_test_site()
+		second = create_test_site(bench=first.bench)
+		untouched = create_test_site(bench=first.bench)
+
+		Bench("Bench", first.bench).migrate_sites(
+			[{"name": first.name, "skip_failing_patches": True}, {"name": second.name}]
+		)
+
+		[first_job] = self.migrate_jobs(first.name)
+		[second_job] = self.migrate_jobs(second.name)
+		self.assertTrue(json.loads(first_job.request_data)["skip_failing_patches"])
+		self.assertFalse(json.loads(second_job.request_data)["skip_failing_patches"])
+		self.assertEqual(self.migrate_jobs(untouched.name), [])
+
+	def test_a_site_from_another_bench_stops_the_whole_request_before_any_migrate(self):
+		site = create_test_site()
+		elsewhere = create_test_site()
+
+		with self.assertRaisesRegex(frappe.ValidationError, "is not an active site on bench"):
+			Bench("Bench", site.bench).migrate_sites([{"name": site.name}, {"name": elsewhere.name}])
+		self.assertEqual(self.migrate_jobs(site.name), [])
