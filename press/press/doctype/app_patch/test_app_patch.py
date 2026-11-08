@@ -7,6 +7,7 @@ from frappe.tests.utils import FrappeTestCase
 from press.press.doctype.app_patch.app_patch import (
 	get_last_patch_head,
 	github_compare_diff_url,
+	parse_patch_head,
 	validate_patch,
 )
 
@@ -114,7 +115,7 @@ class TestValidatePatch(FrappeTestCase):
 COMPARE = "https://github.com/acme/shop/compare/{}...{}.patch"
 
 
-def make_patch(bench: str, status: str, head: str, creation: str):
+def make_patch(bench: str, status: str, head: str, creation: str, filename: str = ""):
 	"""Insert an App Patch row without its after_insert hook, which calls the agent."""
 	frappe.get_doc(
 		{
@@ -123,7 +124,8 @@ def make_patch(bench: str, status: str, head: str, creation: str):
 			"app": "shop",
 			"bench": bench,
 			"status": status,
-			"url": COMPARE.format("1111111", head),
+			"url": "" if filename else COMPARE.format("1111111", head),
+			"filename": filename,
 			"patch": GIT_DIFF,
 			"creation": creation,
 		}
@@ -150,6 +152,26 @@ class TestLastPatchHead(FrappeTestCase):
 	def test_a_bench_with_no_applied_patch_has_no_head(self):
 		make_patch("bench-a", "Failed", "fffffff", "2026-11-02 10:00:00")
 		self.assertIsNone(get_last_patch_head("_test-group", "shop", "bench-a"))
+
+	def test_an_uploaded_file_named_after_its_commits_gives_its_head(self):
+		make_patch("bench-a", "Applied", "", "2026-11-01 10:00:00", filename="shop-7cf1daf-e518ede.patch")
+		self.assertEqual(get_last_patch_head("_test-group", "shop", "bench-a"), "e518ede")
+
+	def test_a_file_without_a_commit_in_its_name_falls_back_to_the_patch_before(self):
+		make_patch("bench-a", "Applied", "aaaaaaa", "2026-11-01 10:00:00")
+		make_patch("bench-a", "Applied", "", "2026-11-02 10:00:00", filename="hotfix.patch")
+		self.assertEqual(get_last_patch_head("_test-group", "shop", "bench-a"), "aaaaaaa")
+
+
+class TestParsePatchHead(FrappeTestCase):
+	def test_compare_urls_commit_urls_and_file_names_give_the_head(self):
+		self.assertEqual(parse_patch_head(COMPARE.format("1111111", "bbbbbbb")), "bbbbbbb")
+		self.assertEqual(parse_patch_head("https://github.com/acme/shop/commit/ccccccc.patch"), "ccccccc")
+		self.assertEqual(parse_patch_head("shop-bench-1-to-65d08a6.patch"), "65d08a6")
+
+	def test_a_file_name_without_a_commit_gives_nothing(self):
+		self.assertIsNone(parse_patch_head("hotfix.patch"))
+		self.assertIsNone(parse_patch_head("shop-session-fix.patch"))
 
 
 class TestGithubCompareDiffUrl(FrappeTestCase):

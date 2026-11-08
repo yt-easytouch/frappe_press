@@ -273,18 +273,16 @@ def get_last_patch_head(release_group: str, app: str, bench: str | None = None) 
 	filters = {"group": release_group, "app": app, "status": "Applied"}
 	if bench:
 		filters["bench"] = bench
-	patch = frappe.db.get_value(
-		"App Patch",
-		filters,
-		["url", "filename"],
-		order_by="creation desc",
-		as_dict=True,
-	)
-	if not patch:
-		return None
-	# Patches applied via file have no url, but the compare range is kept in the
-	# filename (e.g. "<from>...<head>.patch"), so fall back to it.
-	return parse_patch_head(patch.url or patch.filename or "")
+	patches = frappe.get_all("App Patch", filters, ["url", "filename"], order_by="creation desc")
+	# Skip a patch whose name gives no commit, rather than fall back to the deployed one
+	for patch in patches:
+		if head := parse_patch_head(patch.url or "") or parse_patch_head(patch.filename or ""):
+			return head
+	return None
+
+
+# A file name that ends in a commit, e.g. "etpos-7cf1daf-e518ede.patch"
+FILENAME_HEAD = re.compile(r"[-_]([0-9a-f]{7,40})\.(?:patch|diff)$")
 
 
 def parse_patch_head(reference: str) -> str | None:
@@ -294,6 +292,8 @@ def parse_patch_head(reference: str) -> str | None:
 		segment = reference.split("/commit/")[-1]
 	elif "..." in reference:
 		segment = reference.split("...")[-1]
+	elif match := FILENAME_HEAD.search(reference):
+		return match.group(1)
 	else:
 		return None
 

@@ -253,15 +253,15 @@ export default {
 				) || null
 			);
 		},
-		commitOptions() {
+		commits() {
 			const app = this.selectedAppInfo;
 			if (!app) {
 				return [];
 			}
 
-			const options = [{ label: 'Select commit', value: '' }];
+			const commits = [];
 			if (app.current_hash) {
-				options.push({
+				commits.push({
 					label: `Current (${app.current_hash.slice(0, 7)})`,
 					value: app.current_hash,
 				});
@@ -277,27 +277,59 @@ export default {
 				const label = release.tag
 					? `${release.tag} (${release.hash.slice(0, 7)})`
 					: `${release.hash.slice(0, 7)}${message ? ` - ${message}` : ''}`;
-				options.push({ label, value: release.hash });
+				commits.push({ label, value: release.hash });
 			}
-
-			// Ensure the last patched commit is selectable even if it isn't a
-			// tracked release, so the From default can point at it.
-			if (
-				this.lastPatchHead &&
-				!options.some((option) => option.value === this.lastPatchHead)
-			) {
-				options.push({
-					label: `Last patch (${this.lastPatchHead.slice(0, 7)})`,
-					value: this.lastPatchHead,
-				});
-			}
-
-			const benchHead = this.lastPatchHead || app.current_hash;
-			return options.map((option) =>
-				option.value && option.value === benchHead
-					? { ...option, label: `${option.label} · on bench now` }
-					: option,
+			return commits;
+		},
+		benchHead() {
+			// A patch file name gives a short hash; match it to the full one in the list
+			const head = this.lastPatchHead || this.selectedAppInfo?.current_hash || '';
+			const match = this.commits.find(
+				(commit) => head && commit.value.startsWith(head),
 			);
+			return match?.value || head;
+		},
+		commitOptions() {
+			if (!this.selectedAppInfo) {
+				return [];
+			}
+
+			const mark = (commit) =>
+				commit.value === this.benchHead
+					? { ...commit, label: `${commit.label} · on bench now` }
+					: commit;
+			const heading = (label, value) => ({ label, value, disabled: true });
+			const options = [{ label: 'Select commit', value: '' }];
+			const index = this.commits.findIndex(
+				(commit) => commit.value === this.benchHead,
+			);
+
+			// A head outside the list has no known place, so it goes first, ungrouped
+			if (index === -1) {
+				if (this.benchHead) {
+					options.push(
+						mark({
+							label: `Last patch (${this.benchHead.slice(0, 7)})`,
+							value: this.benchHead,
+						}),
+					);
+				}
+				return [...options, ...this.commits];
+			}
+
+			const pending = this.commits.slice(index + 1);
+			return [
+				...options,
+				heading('── ✓ Already on this bench ──', '__applied__'),
+				...this.commits.slice(0, index + 1).map(mark),
+				heading(
+					pending.length
+						? '── Not applied yet ──'
+						: '── Nothing left to apply ──',
+					'__pending__',
+				),
+				...pending,
+			];
 		},
 		comparePageUrl() {
 			const app = this.selectedAppInfo;
@@ -341,7 +373,7 @@ export default {
 				// Ignore if the app or bench changed while the request was in flight
 				if (head && this.selectedApp === app && this.patchBench === bench) {
 					this.lastPatchHead = head;
-					this.fromHash = head;
+					this.fromHash = this.benchHead;
 				}
 			} catch (e) {
 				// Non-critical: fall back to the current-commit default
