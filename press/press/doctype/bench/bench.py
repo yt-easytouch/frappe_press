@@ -674,6 +674,10 @@ class Bench(Document):
 		site = Site("Site", name)
 		if site.bench != self.name or site.status != "Active":
 			frappe.throw(f"{name} is not an active site on bench {self.name}")
+		if site.fatal_site_update:
+			frappe.throw(
+				f"{name} is blocked by its failed update {site.fatal_site_update}. Resolve it first."
+			)
 		return site
 
 	@frappe.whitelist()
