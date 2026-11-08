@@ -6,7 +6,8 @@ import { toast } from 'vue-sonner'
 import { getToastErrorMessage } from '../../utils/toast'
 import GenericList from '../GenericList.vue'
 
-type SiteRow = { name: string; skip_failing_patches: boolean }
+type SiteRow = { name: string; skip_failing_patches: boolean; disabled: boolean }
+type SiteData = { name: string; fatal_site_update: string | null }
 
 const props = defineProps<{ bench: string; releaseGroup: string }>()
 
@@ -19,18 +20,23 @@ const sites = createResource({
 	url: 'press.api.client.get_list',
 	params: {
 		doctype: 'Site',
-		fields: ['name'],
+		fields: ['name', 'fatal_site_update'],
 		filters: { bench: props.bench, status: 'Active' },
 		order_by: 'name asc',
 		// press.api.client.get_list returns 20 rows unless given a limit
 		limit: 1000,
 	},
 	auto: true,
-	onSuccess: (data: { name: string }[]) =>
+	onSuccess: (data: SiteData[]) =>
 		rows.splice(
 			0,
 			rows.length,
-			...data.map((site) => ({ name: site.name, skip_failing_patches: false })),
+			// A site blocked by a failed update cannot migrate, so it stays visible but unselectable
+			...data.map((site) => ({
+				name: site.name,
+				skip_failing_patches: false,
+				disabled: !!site.fatal_site_update,
+			})),
 		),
 })
 
@@ -42,6 +48,23 @@ const listOptions = computed(() => ({
 	columns: [
 		{ label: 'Site', fieldname: 'name' },
 		{
+			label: 'Status',
+			fieldname: 'disabled',
+			width: 0.6,
+			type: 'Component',
+			component: ({ row }: { row: SiteRow }) =>
+				row.disabled
+					? h(
+							'span',
+							{
+								class: 'text-sm text-ink-red-4',
+								title: 'Resolve the failed update first',
+							},
+							'Blocked: failed update',
+						)
+					: null,
+		},
+		{
 			label: 'Skip failed patches',
 			fieldname: 'skip_failing_patches',
 			width: 0.5,
@@ -49,6 +72,7 @@ const listOptions = computed(() => ({
 			component: ({ row }: { row: SiteRow }) =>
 				h(Checkbox, {
 					modelValue: row.skip_failing_patches,
+					disabled: row.disabled,
 					'onUpdate:modelValue': (value: boolean) => {
 						row.skip_failing_patches = value
 					},
