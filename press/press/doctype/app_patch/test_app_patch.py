@@ -4,7 +4,11 @@
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from press.press.doctype.app_patch.app_patch import validate_patch
+from press.press.doctype.app_patch.app_patch import (
+	get_last_patch_head,
+	github_compare_diff_url,
+	validate_patch,
+)
 
 GIT_DIFF = """diff --git a/erpnext/hooks.py b/erpnext/hooks.py
 index 1234567..89abcde 100644
@@ -105,3 +109,60 @@ class TestValidatePatch(FrappeTestCase):
 	def test_hunk_header_mentioned_in_prose_is_refused(self):
 		with self.assertRaises(frappe.ValidationError):
 			validate_patch("The patch starts at @@ -1,3 +1,4 @@ and goes on\n")
+
+
+COMPARE = "https://github.com/acme/shop/compare/{}...{}.patch"
+
+
+def make_patch(bench: str, status: str, head: str, creation: str):
+	"""Insert an App Patch row without its after_insert hook, which calls the agent."""
+	frappe.get_doc(
+		{
+			"doctype": "App Patch",
+			"group": "_test-group",
+			"app": "shop",
+			"bench": bench,
+			"status": status,
+			"url": COMPARE.format("1111111", head),
+			"patch": GIT_DIFF,
+			"creation": creation,
+		}
+	).db_insert()
+
+
+class TestLastPatchHead(FrappeTestCase):
+	"""From in the patch dialog starts at the commit the bench really has."""
+
+	def tearDown(self):
+		frappe.db.rollback()
+
+	def test_a_failed_patch_after_an_applied_one_does_not_move_the_head(self):
+		make_patch("bench-a", "Applied", "aaaaaaa", "2026-11-01 10:00:00")
+		make_patch("bench-a", "Failed", "fffffff", "2026-11-02 10:00:00")
+		self.assertEqual(get_last_patch_head("_test-group", "shop", "bench-a"), "aaaaaaa")
+
+	def test_the_head_comes_from_the_selected_bench_only(self):
+		make_patch("bench-a", "Applied", "aaaaaaa", "2026-11-01 10:00:00")
+		make_patch("bench-b", "Applied", "bbbbbbb", "2026-11-02 10:00:00")
+		self.assertEqual(get_last_patch_head("_test-group", "shop", "bench-a"), "aaaaaaa")
+		self.assertEqual(get_last_patch_head("_test-group", "shop"), "bbbbbbb")
+
+	def test_a_bench_with_no_applied_patch_has_no_head(self):
+		make_patch("bench-a", "Failed", "fffffff", "2026-11-02 10:00:00")
+		self.assertIsNone(get_last_patch_head("_test-group", "shop", "bench-a"))
+
+
+class TestGithubCompareDiffUrl(FrappeTestCase):
+	"""A .patch series fails when a merged branch started before From, so fetch the combined .diff."""
+
+	def test_a_github_compare_patch_url_becomes_its_diff_url(self):
+		self.assertEqual(
+			github_compare_diff_url(COMPARE.format("7cf1daf", "bb8bfbf")),
+			"https://github.com/acme/shop/compare/7cf1daf...bb8bfbf.diff",
+		)
+
+	def test_other_urls_are_left_alone(self):
+		commit = "https://github.com/acme/shop/commit/bb8bfbf.patch"
+		elsewhere = "https://gitlab.com/acme/shop/-/compare/a...b.patch"
+		self.assertEqual(github_compare_diff_url(commit), commit)
+		self.assertEqual(github_compare_diff_url(elsewhere), elsewhere)

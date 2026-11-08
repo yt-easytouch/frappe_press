@@ -1145,10 +1145,12 @@ def apply_patch(release_group: str, app: str, patch_config: dict) -> list[str]:
 
 @frappe.whitelist()
 @protected("Release Group")
-def last_patch_head(name: str, app: str) -> str | None:
+def last_patch_head(name: str, app: str, bench: str | None = None) -> str | None:
 	from press.press.doctype.app_patch.app_patch import get_last_patch_head
 
-	return get_last_patch_head(name, app)
+	if bench and frappe.db.get_value("Bench", bench, "group") != name:
+		frappe.throw(f"Bench {bench} is not in this bench group", frappe.PermissionError)
+	return get_last_patch_head(name, app, bench)
 
 
 @frappe.whitelist()

@@ -209,7 +209,7 @@ def get_patch(patch_config: PatchConfig, app_source: "AppSource | None" = None) 
 	if app_source and app_source.github_installation_id and "github.com/" in patch_url:
 		patch = download_private_github_patch(patch_url, app_source)
 	else:
-		patch = fetch_public_url(patch_url)
+		patch = fetch_public_url(github_compare_diff_url(patch_url))
 
 	validate_patch(patch)
 	return patch
@@ -223,11 +223,20 @@ def download_private_github_patch(patch_url: str, app_source: "AppSource") -> st
 
 	headers = {
 		"Authorization": f"token {app_source.get_access_token()}",
-		"Accept": "application/vnd.github.patch",
+		# One combined diff. A `.patch` is one diff per commit, and a commit from a branch
+		# merged into the range fails on files that changed after the branch started.
+		"Accept": "application/vnd.github.diff",
 	}
 	response = requests.get(api_url, headers=headers)
 	response.raise_for_status()
 	return response.text
+
+
+def github_compare_diff_url(patch_url: str) -> str:
+	"""Ask github.com for the combined `.diff` of a compare range instead of its `.patch` series."""
+	if "github.com/" in patch_url and "/compare/" in patch_url and patch_url.endswith(".patch"):
+		return patch_url.removesuffix(".patch") + ".diff"
+	return patch_url
 
 
 def validate_patch(patch: str):
@@ -254,11 +263,14 @@ def validate_patch(patch: str):
 		)
 
 
-def get_last_patch_head(release_group: str, app: str) -> str | None:
-	"""Return the head commit of the most recently applied patch for an app."""
+def get_last_patch_head(release_group: str, app: str, bench: str | None = None) -> str | None:
+	"""Return the head commit of the last applied patch for an app, on one bench if given."""
+	filters = {"group": release_group, "app": app, "status": "Applied"}
+	if bench:
+		filters["bench"] = bench
 	patch = frappe.db.get_value(
 		"App Patch",
-		{"group": release_group, "app": app},
+		filters,
 		["url", "filename"],
 		order_by="creation desc",
 		as_dict=True,
@@ -298,7 +310,6 @@ def github_patch_api_url(patch_url: str, app_source: "AppSource") -> str | None:
 	if "/commit/" in reference:
 		return f"{api_base}/commits/{reference.split('/commit/')[-1]}"
 	return None
-
 
 
 def get_benches(release_group: str, patch_config: PatchConfig) -> list[str]:

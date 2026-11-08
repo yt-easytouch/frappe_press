@@ -6,6 +6,26 @@
 					You can select the app patch by either entering the patch URL, or by
 					selecting a patch file.
 				</p>
+				<FormControl
+					v-if="!applyToAllBenches && !applyToLatestDeploy"
+					v-model="applyToBench"
+					label="Select bench"
+					type="select"
+					variant="outline"
+					:options="benchList"
+				/>
+				<FormControl
+					v-if="!applyToLatestDeploy"
+					label="Apply patch to all active benches"
+					type="checkbox"
+					v-model="applyToAllBenches"
+				/>
+				<FormControl
+					v-if="!applyToAllBenches"
+					label="Apply patch to all active benches from the latest deploy"
+					type="checkbox"
+					v-model="applyToLatestDeploy"
+				/>
 				<div class="flex flex-col gap-2">
 					<FormControl
 						v-if="!app"
@@ -103,26 +123,6 @@
 				<ErrorMessage class="-mt-2 w-full" :message="error" />
 				<h3 class="mt-4 text-base font-semibold">Patch Config</h3>
 				<FormControl
-					v-if="!applyToAllBenches && !applyToLatestDeploy"
-					v-model="applyToBench"
-					label="Select bench"
-					type="select"
-					variant="outline"
-					:options="benchList"
-				/>
-				<FormControl
-					v-if="!applyToLatestDeploy"
-					label="Apply patch to all active benches"
-					type="checkbox"
-					v-model="applyToAllBenches"
-				/>
-				<FormControl
-					v-if="!applyToAllBenches"
-					label="Apply patch to all active benches from the latest deploy"
-					type="checkbox"
-					v-model="applyToLatestDeploy"
-				/>
-				<FormControl
 					label="Build assets after applying patch"
 					type="checkbox"
 					v-model="buildAssets"
@@ -180,12 +180,11 @@ export default {
 			setTimeout(this.clearApp, 150);
 		},
 		selectedApp() {
-			// Reset the from/to selection and default From to the current commit,
-			// then upgrade it to the last patched commit if there is one.
-			this.lastPatchHead = '';
-			this.fromHash = this.selectedAppInfo?.current_hash || '';
 			this.toHash = '';
-			this.fetchLastPatchHead();
+			this.resetFrom();
+		},
+		patchBench() {
+			this.resetFrom();
 		},
 		comparePatchUrl(value) {
 			// Keep the Patch URL in sync with the selected commit range
@@ -229,6 +228,12 @@ export default {
 		},
 		selectedApp() {
 			return this.app || this.applyToApp;
+		},
+		patchBench() {
+			// Only one chosen bench has a known patch history to start From
+			return this.applyToAllBenches || this.applyToLatestDeploy
+				? ''
+				: this.applyToBench;
 		},
 		appOptions() {
 			return this.deployApps.map((app) => ({
@@ -287,7 +292,12 @@ export default {
 				});
 			}
 
-			return options;
+			const benchHead = this.lastPatchHead || app.current_hash;
+			return options.map((option) =>
+				option.value && option.value === benchHead
+					? { ...option, label: `${option.label} · on bench now` }
+					: option,
+			);
 		},
 		comparePageUrl() {
 			const app = this.selectedAppInfo;
@@ -310,8 +320,15 @@ export default {
 				window.open(url, '_blank');
 			}
 		},
+		resetFrom() {
+			// Default From to the deployed commit, then to the last patch applied on the bench
+			this.lastPatchHead = '';
+			this.fromHash = this.selectedAppInfo?.current_hash || '';
+			this.fetchLastPatchHead();
+		},
 		async fetchLastPatchHead() {
 			const app = this.selectedApp;
+			const bench = this.patchBench;
 			if (!app) {
 				return;
 			}
@@ -319,9 +336,10 @@ export default {
 				const head = await call('press.api.bench.last_patch_head', {
 					name: this.group,
 					app,
+					bench,
 				});
-				// Ignore if the user switched apps while the request was in flight
-				if (head && this.selectedApp === app) {
+				// Ignore if the app or bench changed while the request was in flight
+				if (head && this.selectedApp === app && this.patchBench === bench) {
 					this.lastPatchHead = head;
 					this.fromHash = head;
 				}
@@ -333,6 +351,12 @@ export default {
 			if (!this.benchList.length) {
 				this.error =
 					'This group has no benches, patch cannot be applied.';
+				return false;
+			}
+
+			if (!this.patch && this.fromHash && this.fromHash === this.toHash) {
+				this.error =
+					'The bench already has this commit. Pick a newer commit in To.';
 				return false;
 			}
 
