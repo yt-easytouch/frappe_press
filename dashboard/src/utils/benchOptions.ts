@@ -36,7 +36,15 @@ const showProcesses = (bench: string) => {
 	renderDialog(h(SupervisorProcessesDialog, { bench }))
 }
 
-const runBenchMethod = (bench: string, method: string) =>
+const showMigrateSites = (bench: string, releaseGroup: string) => {
+	const MigrateBenchSitesDialog = defineAsyncComponent(
+		() => import('../components/group/MigrateBenchSitesDialog.vue'),
+	)
+
+	renderDialog(h(MigrateBenchSitesDialog, { bench, releaseGroup }))
+}
+
+const runBenchMethod =(bench: string, method: string) =>
 	createResource({ url: 'press.api.client.run_doc_method' }).submit({
 		dt: 'Bench',
 		dn: bench,
@@ -136,6 +144,11 @@ export const getBenchOptions = ({
 					success: 'Sites have been scheduled for update',
 					error: 'Failed to update sites',
 				}),
+		},
+		{
+			label: 'Migrate All Sites',
+			condition: () => isActive && (row.rows?.length ?? row.site_count) > 0,
+			onClick: () => showMigrateSites(bench, releaseGroup),
 		},
 		{
 			label: 'Restart Bench',

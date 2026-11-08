@@ -664,6 +664,18 @@ class Bench(Document):
 				traceback.print_exc()
 				frappe.db.rollback()
 
+	@dashboard_whitelist()
+	def migrate_sites(self, sites: list[dict]):
+		"""Migrate the chosen active sites of this bench, each with its own skip_failing_patches."""
+		chosen = [(self.get_active_site(row["name"]), bool(row.get("skip_failing_patches"))) for row in sites]
+		return [site.migrate(skip_failing_patches=skip) for site, skip in chosen]
+
+	def get_active_site(self, name: str) -> Site:
+		site = Site("Site", name)
+		if site.bench != self.name or site.status != "Active":
+			frappe.throw(f"{name} is not an active site on bench {self.name}")
+		return site
+
 	@frappe.whitelist()
 	def add_ssh_user(self):
 		proxy_server = frappe.db.get_value("Server", self.server, "proxy_server")
