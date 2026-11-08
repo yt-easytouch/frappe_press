@@ -1039,3 +1039,14 @@ class TestMigrateSites(FrappeTestCase):
 		with self.assertRaisesRegex(frappe.ValidationError, "is not an active site on bench"):
 			Bench("Bench", site.bench).migrate_sites([{"name": site.name}, {"name": elsewhere.name}])
 		self.assertEqual(self.migrate_jobs(site.name), [])
+
+	def test_a_site_blocked_by_a_failed_update_stops_the_request_and_is_named(self):
+		site = create_test_site()
+		blocked = create_test_site(bench=site.bench)
+		frappe.db.set_value("Site", blocked.name, "fatal_site_update", "fake-update")
+
+		with self.assertRaisesRegex(
+			frappe.ValidationError, f"{blocked.name} is blocked by its failed update"
+		):
+			Bench("Bench", site.bench).migrate_sites([{"name": site.name}, {"name": blocked.name}])
+		self.assertEqual(self.migrate_jobs(site.name), [])

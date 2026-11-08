@@ -22,7 +22,8 @@ const sites = createResource({
 		fields: ['name'],
 		filters: { bench: props.bench, status: 'Active' },
 		order_by: 'name asc',
-		limit_page_length: 0,
+		// press.api.client.get_list returns 20 rows unless given a limit
+		limit: 1000,
 	},
 	auto: true,
 	onSuccess: (data: { name: string }[]) =>
