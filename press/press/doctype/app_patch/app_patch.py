@@ -14,6 +14,7 @@ from frappe.model.document import Document
 
 from press.agent import Agent
 from press.api.client import dashboard_whitelist
+from press.press.doctype.app_patch.git_diff import binary_diff, compare_commits
 from press.utils.external_url import fetch_public_url
 
 # What every unified diff has and a JSON metadata document, an HTML error page
@@ -202,6 +203,10 @@ def get_patch(patch_config: PatchConfig, app_source: "AppSource | None" = None) 
 		return patch
 
 	patch_url = patch_config["patch_url"]
+	if app_source and (commits := compare_commits(patch_url)):
+		patch = binary_diff(app_source.repository_url, *commits, app_source.get_access_token())
+		validate_patch(patch)
+		return patch
 
 	# Private GitHub repos reject anonymous downloads. The github.com web `.patch`
 	# endpoint also ignores API tokens, so download through the authenticated
