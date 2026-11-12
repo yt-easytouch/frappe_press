@@ -13,6 +13,7 @@
 		"app_release",
 		"url",
 		"build_assets",
+		"migrate_sites",
 		"meta_section",
 		"bench",
 		"team",
@@ -35,6 +36,12 @@
 			"fieldname": "build_assets",
 			"fieldtype": "Check",
 			"label": "Build assets after applying patch"
+		},
+		{
+			"default": "0",
+			"fieldname": "migrate_sites",
+			"fieldtype": "Check",
+			"label": "Migrate all sites after applying patch"
 		},
 		{ "fieldname": "column_break_vedh", "fieldtype": "Column Break" },
 		{
@@ -111,7 +118,7 @@
 	],
 	"index_web_pages_for_search": 1,
 	"links": [],
-	"modified": "2026-10-19 15:30:00.000000",
+	"modified": "2026-11-12 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Press",
 	"name": "App Patch",

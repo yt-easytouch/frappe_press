@@ -127,6 +127,11 @@
 					type="checkbox"
 					v-model="buildAssets"
 				/>
+				<FormControl
+					label="Migrate all sites after applying patch"
+					type="checkbox"
+					v-model="migrateSites"
+				/>
 			</div>
 		</template>
 		<template v-slot:actions>
@@ -201,6 +206,7 @@ export default {
 			patchURL: '',
 			patchFileName: '',
 			buildAssets: false,
+			migrateSites: false,
 			applyToApp: '',
 			fromHash: '',
 			toHash: '',
@@ -487,6 +493,7 @@ export default {
 						filename: this.patchFileName,
 						patch_url: this.patchURL,
 						build_assets: this.buildAssets,
+						migrate_sites: this.migrateSites,
 						patch_bench: this.applyToBench,
 						patch_all_benches: this.applyToAllBenches,
 						patch_latest_deploy: this.applyToLatestDeploy,

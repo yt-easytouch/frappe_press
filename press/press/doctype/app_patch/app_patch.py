@@ -30,6 +30,7 @@ class PatchConfig(TypedDict):
 	filename: str
 	patch_url: str
 	build_assets: bool
+	migrate_sites: bool
 	patch_bench: str
 	patch_all_benches: bool
 	patch_latest_deploy: bool
@@ -62,6 +63,7 @@ class AppPatch(Document):
 		build_assets: DF.Check
 		filename: DF.Data
 		group: DF.Link
+		migrate_sites: DF.Check
 		name: DF.Int | None
 		patch: DF.Code
 		status: DF.Literal["Not Applied", "In Process", "Failed", "Applied", "Archived"]
@@ -78,6 +80,7 @@ class AppPatch(Document):
 		"bench",
 		"group",
 		"build_assets",
+		"migrate_sites",
 		"url",
 		"status",
 	]
@@ -158,6 +161,15 @@ class AppPatch(Document):
 			app_patch.status = "In Process"
 
 		app_patch.save()
+		if app_patch.status == "Applied" and not revert and app_patch.migrate_sites:
+			frappe.enqueue_doc(app_patch.doctype, app_patch.name, "migrate_bench_sites", enqueue_after_commit=True)
+
+	def migrate_bench_sites(self):
+		"""Migrate the active sites of the patched bench, so the patch's DocType changes and patches reach them."""
+		from press.press.doctype.bench.bench import Bench
+
+		bench = Bench("Bench", self.bench)
+		bench.migrate_sites([{"name": name} for name in bench.migratable_sites()])
 
 	@frappe.whitelist()
 	def revert_all_patches(self):
@@ -188,6 +200,7 @@ def create_app_patch(
 			url=patch_config.get("patch_url"),
 			filename=patch_config.get("filename"),
 			build_assets=patch_config.get("build_assets"),
+			migrate_sites=patch_config.get("migrate_sites"),
 		)
 
 		app_patch: AppPatch = frappe.get_doc(doc_dict)
