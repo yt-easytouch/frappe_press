@@ -670,6 +670,15 @@ class Bench(Document):
 		chosen = [(self.get_active_site(row["name"]), bool(row.get("skip_failing_patches"))) for row in sites]
 		return [site.migrate(skip_failing_patches=skip) for site, skip in chosen]
 
+	def migratable_sites(self) -> list[str]:
+		"""Active sites of this bench, without the ones a failed update blocks."""
+		return frappe.get_all(
+			"Site",
+			{"bench": self.name, "status": "Active", "fatal_site_update": ("is", "not set")},
+			pluck="name",
+			order_by="name asc",
+		)
+
 	def get_active_site(self, name: str) -> Site:
 		site = Site("Site", name)
 		if site.bench != self.name or site.status != "Active":
